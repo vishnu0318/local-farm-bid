@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import Navigation from '@/components/Navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -56,6 +57,23 @@ const Login = () => {
             </CardHeader>
             
             <CardContent>
+              <Tabs defaultValue="buyer" onValueChange={(value) => setRole(value as 'farmer' | 'buyer')} className="mb-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="buyer">Buyer</TabsTrigger>
+                  <TabsTrigger value="farmer">Farmer</TabsTrigger>
+                </TabsList>
+                <TabsContent value="buyer" className="py-2">
+                  <p className="text-sm text-gray-500">
+                    Login as a buyer to browse and bid on fresh produce from local farmers.
+                  </p>
+                </TabsContent>
+                <TabsContent value="farmer" className="py-2">
+                  <p className="text-sm text-gray-500">
+                    Login as a farmer to list your crops and manage auctions.
+                  </p>
+                </TabsContent>
+              </Tabs>
+            
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -81,41 +99,12 @@ const Login = () => {
                   />
                 </div>
                 
-                <div className="space-y-2">
-                  <Label>I am a:</Label>
-                  <div className="flex space-x-4">
-                    <label className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="role"
-                        value="farmer"
-                        checked={role === 'farmer'}
-                        onChange={() => setRole('farmer')}
-                        className="w-4 h-4 text-farmgreen-600"
-                      />
-                      <span>Farmer</span>
-                    </label>
-                    
-                    <label className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="role"
-                        value="buyer"
-                        checked={role === 'buyer'}
-                        onChange={() => setRole('buyer')}
-                        className="w-4 h-4 text-farmgreen-600"
-                      />
-                      <span>Buyer</span>
-                    </label>
-                  </div>
-                </div>
-                
                 <Button 
                   type="submit" 
                   className="w-full"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Logging in..." : "Login"}
+                  {isSubmitting ? "Logging in..." : `Login as ${role === 'farmer' ? 'Farmer' : 'Buyer'}`}
                 </Button>
               </form>
             </CardContent>

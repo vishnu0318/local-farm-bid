@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from "sonner";
+import { Link } from 'react-router-dom';
 
 interface BidFormProps {
   crop: Crop;
 }
 
 const BidForm = ({ crop }: BidFormProps) => {
-  const { user } = useAuth();
+  const { user, isBuyer } = useAuth();
   const { placeBid } = useData();
   const [bidAmount, setBidAmount] = useState<number>(crop.currentBid + 5);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,7 +26,7 @@ const BidForm = ({ crop }: BidFormProps) => {
       return;
     }
     
-    if (user.role !== 'buyer') {
+    if (!isBuyer()) {
       toast.error("Only buyers can place bids");
       return;
     }
@@ -53,6 +54,23 @@ const BidForm = ({ crop }: BidFormProps) => {
       setIsSubmitting(false);
     }
   };
+
+  // If user is a farmer, show a message instead of the bid form
+  if (user?.role === 'farmer') {
+    return (
+      <Card className="p-4 text-center">
+        <h3 className="font-semibold text-lg mb-2">Farmers Cannot Bid</h3>
+        <p className="text-gray-600 mb-4">
+          As a farmer, you cannot place bids on crops. You can only list your own crops for auction.
+        </p>
+        <Link to="/marketplace">
+          <Button variant="outline" className="w-full">
+            Browse Marketplace
+          </Button>
+        </Link>
+      </Card>
+    );
+  }
   
   return (
     <Card className="p-4">
@@ -89,7 +107,7 @@ const BidForm = ({ crop }: BidFormProps) => {
         <Button 
           type="submit" 
           className="w-full" 
-          disabled={isSubmitting || !user || user.role !== 'buyer'}
+          disabled={isSubmitting || !user || !isBuyer()}
         >
           {isSubmitting ? 'Processing...' : 'Place Bid'}
         </Button>
@@ -97,12 +115,6 @@ const BidForm = ({ crop }: BidFormProps) => {
         {!user && (
           <p className="text-xs text-center mt-2 text-amber-600">
             Please log in as a buyer to place a bid
-          </p>
-        )}
-        
-        {user && user.role === 'farmer' && (
-          <p className="text-xs text-center mt-2 text-amber-600">
-            Farmers cannot place bids
           </p>
         )}
       </form>

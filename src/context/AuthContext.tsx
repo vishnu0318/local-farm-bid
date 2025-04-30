@@ -20,6 +20,8 @@ interface AuthContextType {
   login: (email: string, password: string, role: UserRole) => Promise<void>;
   logout: () => void;
   register: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
+  isFarmer: () => boolean;
+  isBuyer: () => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -58,6 +60,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  // Helper functions to check user role
+  const isFarmer = () => user?.role === 'farmer';
+  const isBuyer = () => user?.role === 'buyer';
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -65,6 +71,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       login,
       logout,
       register,
+      isFarmer,
+      isBuyer,
     }}>
       {children}
     </AuthContext.Provider>
