@@ -5,9 +5,18 @@ import { Clock, MapPin, ArrowLeft, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useData, Bid } from '@/context/DataContext';
 import { useLocation } from '@/context/LocationContext';
+import { useAuth } from '@/context/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import Navigation from '@/components/Navigation';
 import BidForm from '@/components/BidForm';
 
@@ -16,6 +25,7 @@ const CropDetail = () => {
   const { crops, bids } = useData();
   const { toast } = useToast();
   const { currentLocation, calculateDistance } = useLocation();
+  const { user } = useAuth();
   
   const [cropBids, setCropBids] = useState<Bid[]>([]);
   const crop = crops.find(c => c.id === id);
@@ -90,6 +100,9 @@ const CropDetail = () => {
     
   const formattedTime = `${timeRemaining.hours}h ${timeRemaining.minutes}m ${timeRemaining.seconds}s`;
   
+  // Check if current user is the farmer who posted this crop
+  const isOwner = user?.id === crop.farmerId;
+  
   return (
     <div className="min-h-screen flex flex-col">
       <Navigation />
@@ -121,6 +134,12 @@ const CropDetail = () => {
                   ) : (
                     <div className="absolute top-4 right-4 bg-farmgreen-500 text-white px-3 py-1 rounded-full text-sm font-medium">
                       Active Auction
+                    </div>
+                  )}
+                  
+                  {isOwner && (
+                    <div className="absolute top-4 left-4 bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-medium">
+                      Your Listing
                     </div>
                   )}
                 </div>
@@ -186,6 +205,35 @@ const CropDetail = () => {
                   
                   <TabsContent value="bids">
                     <Card className="p-6">
+                      {isOwner && !timeRemaining.isEnded && cropBids.length > 0 && (
+                        <div className="mb-6">
+                          <h3 className="text-lg font-semibold mb-4">Current Auction Status</h3>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Bidder</TableHead>
+                                <TableHead>Bid Amount</TableHead>
+                                <TableHead>Time</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {cropBids.slice(0, 5).map((bid) => (
+                                <TableRow key={bid.id}>
+                                  <TableCell className="font-medium">{bid.bidderName}</TableCell>
+                                  <TableCell className="text-farmgreen-600 font-bold">₹{bid.amount}</TableCell>
+                                  <TableCell>{new Date(bid.timestamp).toLocaleTimeString()}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                          {cropBids.length > 5 && (
+                            <p className="text-sm text-gray-500 mt-2 text-center">
+                              + {cropBids.length - 5} more bids
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
                       {cropBids.length > 0 ? (
                         <div className="space-y-4">
                           {cropBids.map((bid) => (
@@ -238,9 +286,54 @@ const CropDetail = () => {
               </div>
             </div>
             
-            {/* Right column - Bid form */}
+            {/* Right column - Bid form or farmer view */}
             <div className="lg:col-span-1">
-              {!timeRemaining.isEnded ? (
+              {isOwner ? (
+                <Card className="p-6">
+                  <h3 className="font-semibold text-lg mb-4">Your Auction Status</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500">Auction Status</p>
+                      <p className="font-semibold">
+                        {timeRemaining.isEnded ? 'Ended' : 'Active'}
+                      </p>
+                    </div>
+                    
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500">Total Bids</p>
+                      <p className="font-semibold">{cropBids.length}</p>
+                    </div>
+                    
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500">Current Highest Bid</p>
+                      <p className="text-xl font-bold text-farmgreen-600">
+                        {crop.currentBid > crop.basePrice ? `₹${crop.currentBid}` : 'No bids yet'}
+                      </p>
+                      {crop.highestBidderName && (
+                        <p className="text-sm">by {crop.highestBidderName}</p>
+                      )}
+                    </div>
+                    
+                    {!timeRemaining.isEnded ? (
+                      <Button variant="outline" className="w-full">
+                        Edit Listing
+                      </Button>
+                    ) : crop.highestBidderName ? (
+                      <div className="space-y-4">
+                        <p className="font-medium">Auction Completed</p>
+                        <Button className="w-full">
+                          Contact Buyer
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-center text-amber-600">
+                        Auction ended without bids
+                      </p>
+                    )}
+                  </div>
+                </Card>
+              ) : !timeRemaining.isEnded ? (
                 <BidForm crop={crop} />
               ) : (
                 <Card className="p-6 text-center">
@@ -269,22 +362,24 @@ const CropDetail = () => {
                 </Card>
               )}
               
-              {/* Contact farmer card */}
-              <Card className="p-6 mt-6">
-                <h3 className="font-semibold text-lg mb-2">About the Farmer</h3>
-                <div className="flex items-center mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
-                    <User size={20} />
+              {/* Contact farmer card - only show for buyers */}
+              {!isOwner && (
+                <Card className="p-6 mt-6">
+                  <h3 className="font-semibold text-lg mb-2">About the Farmer</h3>
+                  <div className="flex items-center mb-4">
+                    <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                      <User size={20} />
+                    </div>
+                    <div className="ml-3">
+                      <p className="font-medium">{crop.farmerName}</p>
+                      <p className="text-sm text-gray-500">Joined 2023</p>
+                    </div>
                   </div>
-                  <div className="ml-3">
-                    <p className="font-medium">{crop.farmerName}</p>
-                    <p className="text-sm text-gray-500">Joined 2023</p>
-                  </div>
-                </div>
-                <Button variant="outline" className="w-full">
-                  Contact Farmer
-                </Button>
-              </Card>
+                  <Button variant="outline" className="w-full">
+                    Contact Farmer
+                  </Button>
+                </Card>
+              )}
             </div>
           </div>
         </div>
