@@ -72,6 +72,23 @@ const BidForm = ({ crop }: BidFormProps) => {
     );
   }
   
+  // If not logged in, show login prompt
+  if (!user) {
+    return (
+      <Card className="p-4 text-center">
+        <h3 className="font-semibold text-lg mb-2">Login Required</h3>
+        <p className="text-gray-600 mb-4">
+          Please log in as a buyer to place bids on crops.
+        </p>
+        <Link to="/login">
+          <Button className="w-full">
+            Login to Bid
+          </Button>
+        </Link>
+      </Card>
+    );
+  }
+  
   return (
     <Card className="p-4">
       <h3 className="font-semibold text-lg mb-2">Place Your Bid</h3>
@@ -107,16 +124,10 @@ const BidForm = ({ crop }: BidFormProps) => {
         <Button 
           type="submit" 
           className="w-full" 
-          disabled={isSubmitting || !user || !isBuyer()}
+          disabled={isSubmitting}
         >
           {isSubmitting ? 'Processing...' : 'Place Bid'}
         </Button>
-        
-        {!user && (
-          <p className="text-xs text-center mt-2 text-amber-600">
-            Please log in as a buyer to place a bid
-          </p>
-        )}
       </form>
     </Card>
   );
