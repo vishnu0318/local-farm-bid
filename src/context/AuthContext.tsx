@@ -47,21 +47,25 @@ const generateUserId = (role: UserRole): string => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    // Check if we have a user in local storage
+    const savedUser = localStorage.getItem('goFreshUser');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
 
   // Mock login function - in a real app, this would connect to a backend
   const login = async (email: string, password: string, role: UserRole) => {
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Mock user data
-    setUser({
+    // Create mock user data based on role
+    const mockUser = {
       id: role === 'farmer' ? 'F123456' : 'B123456',
       name: role === 'farmer' ? 'Demo Farmer' : 'Demo Buyer',
       email,
       role,
       phone: '555-123-4567',
-      address: '123 Farm Road',
+      address: role === 'farmer' ? '123 Farm Road' : '456 Market Street',
       ...(role === 'farmer' ? {
         landSize: '5 acres',
         accountDetails: 'Bank of Agriculture #12345'
@@ -69,11 +73,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         companyName: 'Local Market',
         preferredCategories: ['Vegetables', 'Fruits']
       })
-    });
+    };
+    
+    // Save user to state and localStorage
+    setUser(mockUser);
+    localStorage.setItem('goFreshUser', JSON.stringify(mockUser));
   };
 
   const logout = () => {
     setUser(null);
+    localStorage.removeItem('goFreshUser');
   };
 
   // Enhanced register function that accepts role-specific details
@@ -84,8 +93,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Generate appropriate ID based on role
     const userId = generateUserId(userData.role as UserRole);
     
-    // Set user with all provided data and the generated ID
-    setUser({
+    // Create user with all provided data and the generated ID
+    const newUser = {
       id: userId,
       name: userData.name || '',
       email: userData.email || '',
@@ -100,7 +109,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         companyName: userData.companyName,
         preferredCategories: userData.preferredCategories
       })
-    });
+    };
+    
+    // Save user to state and localStorage
+    setUser(newUser);
+    localStorage.setItem('goFreshUser', JSON.stringify(newUser));
   };
 
   // Helper functions to check user role
