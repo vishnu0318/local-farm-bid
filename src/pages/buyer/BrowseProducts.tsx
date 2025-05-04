@@ -56,7 +56,7 @@ const BrowseProducts = () => {
   const [products, setProducts] = useState(MOCK_PRODUCTS);
   const [filters, setFilters] = useState({
     search: '',
-    category: '',
+    category: 'all', // Changed from empty string to 'all'
     maxPrice: [10],
     minBids: 0,
   });
@@ -86,7 +86,7 @@ const BrowseProducts = () => {
   const filteredProducts = products.filter(product => {
     return (
       product.name.toLowerCase().includes(filters.search.toLowerCase()) &&
-      (filters.category === '' || product.category === filters.category) &&
+      (filters.category === 'all' || product.category === filters.category) && // Changed comparison from empty string to 'all'
       parseFloat(product.price) <= filters.maxPrice[0]
     );
   });
@@ -122,7 +122,7 @@ const BrowseProducts = () => {
                   <SelectValue placeholder="All categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All categories</SelectItem>
+                  <SelectItem value="all">All categories</SelectItem> {/* Changed value from empty string to 'all' */}
                   <SelectItem value="vegetables">Vegetables</SelectItem>
                   <SelectItem value="fruits">Fruits</SelectItem>
                   <SelectItem value="grains">Grains</SelectItem>
