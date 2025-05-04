@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from "sonner";
 import { Link } from 'react-router-dom';
+import { IndianRupee } from 'lucide-react';
 
 interface BidFormProps {
   crop: Crop;
@@ -18,6 +19,13 @@ const BidForm = ({ crop }: BidFormProps) => {
   const [bidAmount, setBidAmount] = useState<number>(crop.currentBid + 5);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Check if bidding period has ended
+  const isBiddingEnded = () => {
+    const now = new Date();
+    const endTime = new Date(crop.endTime);
+    return now > endTime;
+  };
+  
   const handleBidSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -28,6 +36,11 @@ const BidForm = ({ crop }: BidFormProps) => {
     
     if (!isBuyer()) {
       toast.error("Only buyers can place bids");
+      return;
+    }
+    
+    if (isBiddingEnded()) {
+      toast.error("This auction has ended");
       return;
     }
     
@@ -54,6 +67,23 @@ const BidForm = ({ crop }: BidFormProps) => {
       setIsSubmitting(false);
     }
   };
+
+  // If bidding has ended, show a message
+  if (isBiddingEnded()) {
+    return (
+      <Card className="p-4 text-center">
+        <h3 className="font-semibold text-lg mb-2">Auction Ended</h3>
+        <p className="text-gray-600 mb-4">
+          This auction has ended and is no longer accepting bids.
+        </p>
+        <Link to="/marketplace">
+          <Button variant="outline" className="w-full">
+            Browse Marketplace
+          </Button>
+        </Link>
+      </Card>
+    );
+  }
 
   // If user is a farmer, show a message instead of the bid form
   if (user?.role === 'farmer') {
@@ -95,7 +125,10 @@ const BidForm = ({ crop }: BidFormProps) => {
       
       <div className="mb-4">
         <p className="text-sm text-gray-600">Current Highest Bid</p>
-        <p className="text-xl font-bold text-farmgreen-600">₹{crop.currentBid}</p>
+        <div className="flex items-center">
+          <IndianRupee className="h-4 w-4 mr-0.5 text-farmgreen-600" />
+          <p className="text-xl font-bold text-farmgreen-600">{crop.currentBid}</p>
+        </div>
         {crop.highestBidderName && (
           <p className="text-sm text-gray-500">by {crop.highestBidderName}</p>
         )}

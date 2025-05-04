@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Eye } from 'lucide-react';
+import { Eye, IndianRupee } from 'lucide-react';
 
 const MOCK_PRODUCTS = [
   {
@@ -18,11 +18,12 @@ const MOCK_PRODUCTS = [
     farmer: 'Green Valley Farm',
     quantity: '50',
     unit: 'kg',
-    price: '2.99',
+    price: '200',
     bids: 3,
-    highestBid: '3.25',
+    highestBid: '225',
     timeLeft: '2 days',
     imageUrl: 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
+    bidEnd: '2025-05-10T18:00:00', // Added bid end time
   },
   {
     id: 'p2',
@@ -31,11 +32,12 @@ const MOCK_PRODUCTS = [
     farmer: 'Orchard Hills',
     quantity: '100',
     unit: 'kg',
-    price: '1.99',
+    price: '150',
     bids: 5,
-    highestBid: '2.35',
+    highestBid: '175',
     timeLeft: '1 day',
     imageUrl: 'https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a',
+    bidEnd: '2025-05-08T18:00:00',
   },
   {
     id: 'p3',
@@ -44,11 +46,12 @@ const MOCK_PRODUCTS = [
     farmer: 'Sunny Fields',
     quantity: '30',
     unit: 'kg',
-    price: '1.50',
+    price: '120',
     bids: 2,
-    highestBid: '1.75',
+    highestBid: '135',
     timeLeft: '3 days',
     imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37',
+    bidEnd: '2025-05-12T18:00:00',
   },
 ];
 
@@ -56,8 +59,8 @@ const BrowseProducts = () => {
   const [products, setProducts] = useState(MOCK_PRODUCTS);
   const [filters, setFilters] = useState({
     search: '',
-    category: 'all', // Changed from empty string to 'all'
-    maxPrice: [10],
+    category: 'all',
+    maxPrice: [500], // Changed to a higher value in INR
     minBids: 0,
   });
 
@@ -82,11 +85,21 @@ const BrowseProducts = () => {
     });
   };
 
+  // Check if bid is still active (not expired)
+  const isBidActive = (endTimeStr: string) => {
+    const endTime = new Date(endTimeStr);
+    const now = new Date();
+    return endTime > now;
+  };
+
+  // Filter active bids
+  const activeBids = products.filter(product => isBidActive(product.bidEnd));
+
   // Filtered products based on search and filters
-  const filteredProducts = products.filter(product => {
+  const filteredProducts = activeBids.filter(product => {
     return (
       product.name.toLowerCase().includes(filters.search.toLowerCase()) &&
-      (filters.category === 'all' || product.category === filters.category) && // Changed comparison from empty string to 'all'
+      (filters.category === 'all' || product.category === filters.category) && 
       parseFloat(product.price) <= filters.maxPrice[0]
     );
   });
@@ -122,7 +135,7 @@ const BrowseProducts = () => {
                   <SelectValue placeholder="All categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All categories</SelectItem> {/* Changed value from empty string to 'all' */}
+                  <SelectItem value="all">All categories</SelectItem>
                   <SelectItem value="vegetables">Vegetables</SelectItem>
                   <SelectItem value="fruits">Fruits</SelectItem>
                   <SelectItem value="grains">Grains</SelectItem>
@@ -133,14 +146,14 @@ const BrowseProducts = () => {
             
             <div className="space-y-2 md:col-span-2">
               <div className="flex justify-between">
-                <Label htmlFor="price">Max Price ($ per unit)</Label>
-                <span>${filters.maxPrice[0].toFixed(2)}</span>
+                <Label htmlFor="price">Max Price (₹ per unit)</Label>
+                <span>₹{filters.maxPrice[0].toFixed(2)}</span>
               </div>
               <Slider 
                 id="price"
                 min={0}
-                max={10}
-                step={0.5}
+                max={500}
+                step={10}
                 value={filters.maxPrice}
                 onValueChange={handlePriceChange}
               />
@@ -179,11 +192,17 @@ const BrowseProducts = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm text-gray-500">Base Price</p>
-                    <p className="text-lg font-medium">${product.price}/{product.unit}</p>
+                    <p className="text-lg font-medium flex items-center">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {product.price}/{product.unit}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-gray-500">Highest Bid</p>
-                    <p className="text-lg font-medium text-green-600">${product.highestBid}/{product.unit}</p>
+                    <p className="text-lg font-medium text-green-600 flex items-center justify-end">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {product.highestBid}/{product.unit}
+                    </p>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">

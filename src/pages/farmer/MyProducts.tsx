@@ -12,9 +12,11 @@ const MOCK_PRODUCTS = [
     id: 'p1',
     name: 'Organic Tomatoes',
     category: 'vegetables',
+    subCategory: 'leafy',
     quantity: '50',
     unit: 'kg',
     price: '200',
+    description: 'Fresh organic tomatoes grown without pesticides',
     status: 'active',
     bids: 3,
     highestBid: '225',
@@ -26,9 +28,11 @@ const MOCK_PRODUCTS = [
     id: 'p2',
     name: 'Fresh Apples',
     category: 'fruits',
+    subCategory: 'seasonal',
     quantity: '100',
     unit: 'kg',
     price: '150',
+    description: 'Freshly harvested apples from our orchard',
     status: 'pending',
     bids: 0,
     highestBid: null,
@@ -53,9 +57,11 @@ const MyProducts = () => {
     });
   };
 
-  const handleEdit = (productId: string) => {
-    // In a real app, navigate to edit product page with ID
-    navigate(`/farmer/edit-product/${productId}`);
+  const handleEdit = (product) => {
+    // Navigate to edit page with product data
+    navigate(`/farmer/edit-product/${product.id}`, { 
+      state: { product } 
+    });
   };
 
   return (
@@ -146,7 +152,7 @@ const MyProducts = () => {
                     <Button 
                       variant="outline" 
                       size="icon" 
-                      onClick={() => handleEdit(product.id)}
+                      onClick={() => handleEdit(product)}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>

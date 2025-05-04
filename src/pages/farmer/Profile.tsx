@@ -8,6 +8,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Checkbox } from '@/components/ui/checkbox';
+
+const PRODUCT_TYPES = [
+  { id: 'vegetables', label: 'Vegetables' },
+  { id: 'fruits', label: 'Fruits' },
+  { id: 'grains', label: 'Grains' },
+  { id: 'dairy', label: 'Dairy Products' },
+  { id: 'flowers', label: 'Flowers' },
+  { id: 'spices', label: 'Spices & Herbs' },
+  { id: 'honey', label: 'Honey & Bee Products' },
+  { id: 'eggs', label: 'Eggs & Poultry' },
+  { id: 'organic', label: 'Organic Products' },
+];
 
 const FarmerProfile = () => {
   const { user } = useAuth();
@@ -26,6 +39,7 @@ const FarmerProfile = () => {
     farmingExperience: '15 years',
     bio: 'Experienced farmer specializing in organic vegetable production with focus on sustainable farming practices.',
     profileImage: 'https://randomuser.me/api/portraits/men/72.jpg',
+    productTypes: ['vegetables', 'fruits', 'organic'],
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -34,6 +48,24 @@ const FarmerProfile = () => {
       ...prev,
       [name]: value
     }));
+  };
+  
+  const toggleProductType = (productTypeId: string) => {
+    setProfileData(prev => {
+      const productTypes = [...prev.productTypes];
+      
+      if (productTypes.includes(productTypeId)) {
+        return {
+          ...prev,
+          productTypes: productTypes.filter(id => id !== productTypeId)
+        };
+      } else {
+        return {
+          ...prev,
+          productTypes: [...productTypes, productTypeId]
+        };
+      }
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -193,6 +225,27 @@ const FarmerProfile = () => {
                       value={profileData.farmingExperience} 
                       onChange={handleChange} 
                     />
+                  </div>
+                  
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Product Types</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2">
+                      {PRODUCT_TYPES.map((type) => (
+                        <div className="flex items-center space-x-2" key={type.id}>
+                          <Checkbox 
+                            id={`product-${type.id}`} 
+                            checked={profileData.productTypes.includes(type.id)}
+                            onCheckedChange={() => toggleProductType(type.id)}
+                          />
+                          <label
+                            htmlFor={`product-${type.id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            {type.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   
                   <div className="space-y-2 md:col-span-2">

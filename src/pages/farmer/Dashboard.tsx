@@ -17,7 +17,7 @@ const FarmerDashboard = () => {
             <CardDescription>Your listed products</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
+            <div className="text-3xl font-bold">2</div>
             <p className="text-sm text-gray-500">Products currently listed</p>
           </CardContent>
         </Card>
@@ -28,21 +28,21 @@ const FarmerDashboard = () => {
             <CardDescription>Products with active bidding</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">0</div>
+            <div className="text-3xl font-bold">1</div>
             <p className="text-sm text-gray-500">Active auctions running</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader>
-            <CardTitle>Total Earnings</CardTitle>
-            <CardDescription>Your total earnings to date</CardDescription>
+            <CardTitle>Monthly Earnings</CardTitle>
+            <CardDescription>Your earnings this month</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold flex items-center">
-              <IndianRupee className="h-6 w-6 mr-1" />0.00
+              <IndianRupee className="h-6 w-6 mr-1" />5,250.00
             </div>
-            <p className="text-sm text-gray-500">From 0 completed sales</p>
+            <p className="text-sm text-gray-500">From 3 completed sales</p>
           </CardContent>
         </Card>
       </div>
@@ -53,7 +53,29 @@ const FarmerDashboard = () => {
           <CardDescription>Latest actions on your products</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-center py-8 text-gray-500">No recent activity to display</p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b">
+              <div>
+                <p className="font-medium">New Bid on Organic Tomatoes</p>
+                <p className="text-sm text-gray-500">Highest bid: ₹225/kg</p>
+              </div>
+              <p className="text-sm text-gray-500">2 hours ago</p>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b">
+              <div>
+                <p className="font-medium">Sale Completed: Organic Potatoes</p>
+                <p className="text-sm text-gray-500">Final price: ₹180/kg</p>
+              </div>
+              <p className="text-sm text-gray-500">2 days ago</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Payment Received: ₹1,800</p>
+                <p className="text-sm text-gray-500">For Organic Potatoes</p>
+              </div>
+              <p className="text-sm text-gray-500">2 days ago</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
