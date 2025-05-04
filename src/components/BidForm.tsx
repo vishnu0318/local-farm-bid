@@ -16,7 +16,7 @@ interface BidFormProps {
 const BidForm = ({ crop }: BidFormProps) => {
   const { user, isBuyer } = useAuth();
   const { placeBid } = useData();
-  const [bidAmount, setBidAmount] = useState<number>(crop.currentBid + 5);
+  const [bidAmount, setBidAmount] = useState<number>(crop.currentBid > 0 ? crop.currentBid + 5 : crop.basePrice + 5);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Check if bidding period has ended
@@ -49,6 +49,11 @@ const BidForm = ({ crop }: BidFormProps) => {
       return;
     }
     
+    if (bidAmount <= crop.basePrice) {
+      toast.error(`Your bid must be higher than the base price (₹${crop.basePrice})`);
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -76,9 +81,9 @@ const BidForm = ({ crop }: BidFormProps) => {
         <p className="text-gray-600 mb-4">
           This auction has ended and is no longer accepting bids.
         </p>
-        <Link to="/marketplace">
+        <Link to="/buyer/browse-products">
           <Button variant="outline" className="w-full">
-            Browse Marketplace
+            Browse More Products
           </Button>
         </Link>
       </Card>
@@ -93,9 +98,9 @@ const BidForm = ({ crop }: BidFormProps) => {
         <p className="text-gray-600 mb-4">
           As a farmer, you cannot place bids on crops. You can only list your own crops for auction.
         </p>
-        <Link to="/marketplace">
+        <Link to="/farmer/add-product">
           <Button variant="outline" className="w-full">
-            Browse Marketplace
+            List Your Products
           </Button>
         </Link>
       </Card>
@@ -110,7 +115,7 @@ const BidForm = ({ crop }: BidFormProps) => {
         <p className="text-gray-600 mb-4">
           Please log in as a buyer to place bids on crops.
         </p>
-        <Link to="/login">
+        <Link to="/login?role=buyer">
           <Button className="w-full">
             Login to Bid
           </Button>
@@ -126,8 +131,8 @@ const BidForm = ({ crop }: BidFormProps) => {
       <div className="mb-4">
         <p className="text-sm text-gray-600">Current Highest Bid</p>
         <div className="flex items-center">
-          <IndianRupee className="h-4 w-4 mr-0.5 text-farmgreen-600" />
-          <p className="text-xl font-bold text-farmgreen-600">{crop.currentBid}</p>
+          <IndianRupee className="h-4 w-4 mr-0.5 text-green-600" />
+          <p className="text-xl font-bold text-green-600">{crop.currentBid || crop.basePrice}</p>
         </div>
         {crop.highestBidderName && (
           <p className="text-sm text-gray-500">by {crop.highestBidderName}</p>
@@ -144,19 +149,19 @@ const BidForm = ({ crop }: BidFormProps) => {
             type="number"
             value={bidAmount}
             onChange={(e) => setBidAmount(Number(e.target.value))}
-            min={crop.currentBid + 1}
+            min={crop.currentBid ? crop.currentBid + 1 : crop.basePrice + 1}
             step={1}
             required
             className="w-full"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Minimum bid: ₹{crop.currentBid + 1}
+            Minimum bid: ₹{(crop.currentBid ? crop.currentBid : crop.basePrice) + 1}
           </p>
         </div>
         
         <Button 
           type="submit" 
-          className="w-full" 
+          className="w-full bg-green-600 hover:bg-green-700" 
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Processing...' : 'Place Bid'}

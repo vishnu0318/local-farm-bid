@@ -1,5 +1,5 @@
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
 export type UserRole = 'farmer' | 'buyer' | null;
 
@@ -25,11 +25,12 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<void>;
+  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
   logout: () => void;
   register: (userData: Partial<User>, password: string) => Promise<void>;
   isFarmer: () => boolean;
   isBuyer: () => boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,38 +47,74 @@ const generateUserId = (role: UserRole): string => {
   }
 };
 
+// Mock database for users
+const mockDatabase = {
+  users: [
+    {
+      id: 'F123456',
+      name: 'Demo Farmer',
+      email: 'farmer@example.com',
+      password: 'password123',
+      role: 'farmer',
+      phone: '555-123-4567',
+      address: '123 Farm Road',
+      landSize: '5 acres',
+      accountDetails: 'Bank of Agriculture #12345'
+    },
+    {
+      id: 'B123456',
+      name: 'Demo Buyer',
+      email: 'buyer@example.com',
+      password: 'password123',
+      role: 'buyer',
+      phone: '555-123-4567',
+      address: '456 Market Street',
+      companyName: 'Local Market',
+      preferredCategories: ['Vegetables', 'Fruits']
+    }
+  ]
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => {
     // Check if we have a user in local storage
     const savedUser = localStorage.getItem('goFreshUser');
     return savedUser ? JSON.parse(savedUser) : null;
   });
+  const [loading, setLoading] = useState(true);
 
-  // Mock login function - in a real app, this would connect to a backend
-  const login = async (email: string, password: string, role: UserRole) => {
+  useEffect(() => {
+    // Simulate loading state for authentication check
+    setTimeout(() => {
+      setLoading(false);
+    }, 1000);
+  }, []);
+
+  // Enhanced login function that checks credentials
+  const login = async (email: string, password: string, role: UserRole): Promise<boolean> => {
+    setLoading(true);
+    
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Create mock user data based on role
-    const mockUser = {
-      id: role === 'farmer' ? 'F123456' : 'B123456',
-      name: role === 'farmer' ? 'Demo Farmer' : 'Demo Buyer',
-      email,
-      role,
-      phone: '555-123-4567',
-      address: role === 'farmer' ? '123 Farm Road' : '456 Market Street',
-      ...(role === 'farmer' ? {
-        landSize: '5 acres',
-        accountDetails: 'Bank of Agriculture #12345'
-      } : {
-        companyName: 'Local Market',
-        preferredCategories: ['Vegetables', 'Fruits']
-      })
-    };
+    // Check mock database for matching credentials
+    const foundUser = mockDatabase.users.find(
+      u => u.email === email && u.password === password && u.role === role
+    );
     
-    // Save user to state and localStorage
-    setUser(mockUser);
-    localStorage.setItem('goFreshUser', JSON.stringify(mockUser));
+    if (foundUser) {
+      // Create user object without password for storage
+      const { password: _, ...safeUserData } = foundUser;
+      
+      // Save user to state and localStorage
+      setUser(safeUserData);
+      localStorage.setItem('goFreshUser', JSON.stringify(safeUserData));
+      setLoading(false);
+      return true;
+    }
+    
+    setLoading(false);
+    return false;
   };
 
   const logout = () => {
@@ -85,8 +122,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem('goFreshUser');
   };
 
-  // Enhanced register function that accepts role-specific details
+  // Enhanced register function that saves to mock database
   const register = async (userData: Partial<User>, password: string) => {
+    setLoading(true);
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
     
@@ -98,6 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       id: userId,
       name: userData.name || '',
       email: userData.email || '',
+      password: password,  // In a real app, this would be hashed
       role: userData.role as UserRole,
       phone: userData.phone,
       address: userData.address,
@@ -111,9 +150,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       })
     };
     
-    // Save user to state and localStorage
-    setUser(newUser);
-    localStorage.setItem('goFreshUser', JSON.stringify(newUser));
+    // Add to mock database
+    mockDatabase.users.push(newUser);
+    
+    // Save user to state and localStorage (without password)
+    const { password: _, ...safeUserData } = newUser;
+    setUser(safeUserData);
+    localStorage.setItem('goFreshUser', JSON.stringify(safeUserData));
+    setLoading(false);
   };
 
   // Helper functions to check user role
@@ -129,6 +173,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       register,
       isFarmer,
       isBuyer,
+      loading
     }}>
       {children}
     </AuthContext.Provider>
