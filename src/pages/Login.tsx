@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/context/AuthContext';
+import { IndianRupee } from 'lucide-react';
 
 const Login = () => {
   const { login, isAuthenticated, user } = useAuth();
@@ -66,19 +67,24 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-green-50 to-green-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-green-50 via-green-100 to-emerald-100 p-4">
       <div className="max-w-md w-full">
         <Link to="/" className="flex items-center justify-center mb-8">
-          <div className="text-4xl font-bold text-green-600">Go Fresh</div>
+          <div className="text-4xl font-bold text-green-600 flex items-center">
+            <span className="text-green-700">Go</span>
+            <IndianRupee className="h-8 w-8 mx-1" />
+            <span className="text-green-500">Fresh</span>
+          </div>
         </Link>
         
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-2xl">Login</CardTitle>
-            <CardDescription>
+        <Card className="shadow-lg border-t-4 border-t-green-500">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold text-center">Welcome Back</CardTitle>
+            <CardDescription className="text-center">
               Enter your credentials to access your account
             </CardDescription>
           </CardHeader>
+          
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -87,7 +93,7 @@ const Login = () => {
                   <Button
                     type="button"
                     variant={role === 'farmer' ? 'default' : 'outline'}
-                    className={role === 'farmer' ? 'bg-green-600 hover:bg-green-700' : ''}
+                    className={role === 'farmer' ? 'bg-green-600 hover:bg-green-700 border-2 border-transparent' : 'border-2 border-green-200 hover:border-green-500'}
                     onClick={() => setRole('farmer')}
                   >
                     Farmer
@@ -95,7 +101,7 @@ const Login = () => {
                   <Button
                     type="button"
                     variant={role === 'buyer' ? 'default' : 'outline'}
-                    className={role === 'buyer' ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                    className={role === 'buyer' ? 'bg-blue-600 hover:bg-blue-700 border-2 border-transparent' : 'border-2 border-blue-200 hover:border-blue-500'}
                     onClick={() => setRole('buyer')}
                   >
                     Buyer
@@ -104,7 +110,7 @@ const Login = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-gray-700">Email</Label>
                 <Input 
                   id="email" 
                   placeholder="Enter your email" 
@@ -112,13 +118,14 @@ const Login = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required 
+                  className="border-gray-300 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <Link to="/forgot-password" className="text-sm text-green-600 hover:text-green-700">
+                  <Label htmlFor="password" className="text-gray-700">Password</Label>
+                  <Link to="/forgot-password" className="text-sm text-green-600 hover:text-green-700 hover:underline">
                     Forgot password?
                   </Link>
                 </div>
@@ -129,20 +136,21 @@ const Login = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required 
+                  className="border-gray-300 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
               <Button 
                 type="submit" 
-                className="w-full" 
+                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 transition-all duration-300" 
                 disabled={isLoading}
               >
                 {isLoading ? "Logging in..." : "Login"}
               </Button>
               <p className="text-center text-sm text-gray-500">
                 Don't have an account?{' '}
-                <Link to="/register" className="text-green-600 hover:text-green-700 font-medium">
+                <Link to="/register" className="text-green-600 hover:text-green-700 font-medium hover:underline">
                   Create an account
                 </Link>
               </p>

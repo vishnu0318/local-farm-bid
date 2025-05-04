@@ -3,6 +3,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { IndianRupee } from 'lucide-react';
 
 const BuyerDashboard = () => {
   const { user } = useAuth();

@@ -9,6 +9,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { Calendar as CalendarIcon, Clock, IndianRupee } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -24,6 +29,10 @@ const AddProduct = () => {
     description: '',
     harvestDate: '',
     expiryDate: '',
+    bidStartDate: null as Date | null,
+    bidEndDate: null as Date | null,
+    bidStartTime: '',
+    bidEndTime: '',
     imageUrl: '',
   });
 
@@ -42,8 +51,25 @@ const AddProduct = () => {
     }));
   };
 
+  const handleDateChange = (name: string, date: Date | null) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: date
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate bid times
+    if (!formData.bidStartDate || !formData.bidEndDate || !formData.bidStartTime || !formData.bidEndTime) {
+      toast({
+        title: "Missing Bid Information",
+        description: "Please set both start and end times for bidding",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Here we would typically send the data to an API
     console.log('Product data submitted:', formData);
@@ -51,7 +77,7 @@ const AddProduct = () => {
     // Show success message
     toast({
       title: "Product Added",
-      description: `${formData.name} has been successfully added.`,
+      description: `${formData.name} has been successfully added with bidding period.`,
     });
     
     // Redirect to my products page
@@ -134,13 +160,13 @@ const AddProduct = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="price">Price per unit (USD)</Label>
+                <Label htmlFor="price" className="flex items-center">Base Price <IndianRupee className="h-3 w-3 ml-1"/></Label>
                 <Input 
                   id="price" 
                   name="price" 
                   type="number" 
                   step="0.01" 
-                  placeholder="Enter price" 
+                  placeholder="Enter price in INR" 
                   value={formData.price} 
                   onChange={handleChange} 
                   required 
@@ -157,7 +183,93 @@ const AddProduct = () => {
                   onChange={handleChange} 
                 />
               </div>
-              
+            </div>
+
+            {/* Bidding Period Section */}
+            <div className="border p-4 rounded-md bg-gray-50">
+              <h3 className="text-lg font-medium mb-4">Bidding Period</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Bid Start Date & Time</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !formData.bidStartDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.bidStartDate ? format(formData.bidStartDate, "PPP") : <span>Pick date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={formData.bidStartDate || undefined}
+                          onSelect={(date) => handleDateChange('bidStartDate', date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+                      <Input
+                        type="time"
+                        name="bidStartTime"
+                        value={formData.bidStartTime}
+                        onChange={handleChange}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Bid End Date & Time</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !formData.bidEndDate && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.bidEndDate ? format(formData.bidEndDate, "PPP") : <span>Pick date</span>}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0">
+                        <Calendar
+                          mode="single"
+                          selected={formData.bidEndDate || undefined}
+                          onSelect={(date) => handleDateChange('bidEndDate', date)}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <div className="relative">
+                      <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+                      <Input
+                        type="time"
+                        name="bidEndTime"
+                        value={formData.bidEndTime}
+                        onChange={handleChange}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="expiryDate">Expected Expiry Date</Label>
                 <Input 

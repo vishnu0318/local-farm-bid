@@ -1,10 +1,11 @@
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Edit, Trash, Plus } from 'lucide-react';
+import { Eye, Edit, Trash, Plus, Calendar, Clock, IndianRupee } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 const MOCK_PRODUCTS = [
   {
@@ -13,11 +14,13 @@ const MOCK_PRODUCTS = [
     category: 'vegetables',
     quantity: '50',
     unit: 'kg',
-    price: '2.99',
+    price: '200',
     status: 'active',
     bids: 3,
-    highestBid: '3.25',
+    highestBid: '225',
     imageUrl: 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
+    bidStart: '2025-05-01T10:00:00',
+    bidEnd: '2025-05-10T18:00:00',
   },
   {
     id: 'p2',
@@ -25,16 +28,35 @@ const MOCK_PRODUCTS = [
     category: 'fruits',
     quantity: '100',
     unit: 'kg',
-    price: '1.99',
+    price: '150',
     status: 'pending',
     bids: 0,
     highestBid: null,
     imageUrl: 'https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a',
+    bidStart: '2025-05-05T09:00:00',
+    bidEnd: '2025-05-15T17:00:00',
   }
 ];
 
 const MyProducts = () => {
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [products, setProducts] = useState(MOCK_PRODUCTS);
+
+  const handleDelete = (productId: string) => {
+    // Filter out the deleted product
+    setProducts(products.filter(product => product.id !== productId));
+    
+    toast({
+      title: "Product Deleted",
+      description: "Your product has been successfully deleted.",
+    });
+  };
+
+  const handleEdit = (productId: string) => {
+    // In a real app, navigate to edit product page with ID
+    navigate(`/farmer/edit-product/${productId}`);
+  };
 
   return (
     <div>
@@ -60,7 +82,7 @@ const MyProducts = () => {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => (
-            <Card key={product.id}>
+            <Card key={product.id} className="overflow-hidden">
               <div className="aspect-w-16 aspect-h-9 relative">
                 <img 
                   src={product.imageUrl} 
@@ -78,17 +100,40 @@ const MyProducts = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Base Price</p>
-                    <p className="text-lg font-medium">${product.price}/{product.unit}</p>
-                  </div>
-                  {product.bids > 0 && (
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Highest Bid</p>
-                      <p className="text-lg font-medium text-green-600">${product.highestBid}/{product.unit}</p>
+                <div className="mb-4">
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="flex items-center text-gray-500 text-sm">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      <span>
+                        {new Date(product.bidStart).toLocaleDateString()}
+                      </span>
                     </div>
-                  )}
+                    <div className="flex items-center justify-end text-gray-500 text-sm">
+                      <Clock className="h-3 w-3 mr-1" />
+                      <span>
+                        {new Date(product.bidEnd).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm text-gray-500">Base Price</p>
+                      <p className="text-lg font-medium flex items-center">
+                        <IndianRupee className="h-4 w-4 mr-0.5" />
+                        {product.price}/{product.unit}
+                      </p>
+                    </div>
+                    {product.bids > 0 && (
+                      <div className="text-right">
+                        <p className="text-sm text-gray-500">Highest Bid</p>
+                        <p className="text-lg font-medium text-green-600 flex items-center justify-end">
+                          <IndianRupee className="h-4 w-4 mr-0.5" />
+                          {product.highestBid}/{product.unit}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-500">
@@ -98,10 +143,19 @@ const MyProducts = () => {
                     <Button variant="outline" size="icon">
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="icon">
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={() => handleEdit(product.id)}
+                    >
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="icon" className="text-red-500 hover:text-red-600">
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="text-red-500 hover:text-red-600"
+                      onClick={() => handleDelete(product.id)}
+                    >
                       <Trash className="h-4 w-4" />
                     </Button>
                   </div>

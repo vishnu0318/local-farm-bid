@@ -6,6 +6,36 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
+import { IndianRupee } from 'lucide-react';
+
+// Mock payment history data
+const MOCK_PAYMENTS = [
+  {
+    id: 'pay1',
+    date: '2025-04-20',
+    amount: 15000,
+    product: 'Organic Tomatoes',
+    buyerName: 'Farm Fresh Market',
+    status: 'completed',
+  },
+  {
+    id: 'pay2',
+    date: '2025-04-15',
+    amount: 8500,
+    product: 'Fresh Apples',
+    buyerName: 'Organic Foods Co.',
+    status: 'completed',
+  },
+  {
+    id: 'pay3',
+    date: '2025-04-10',
+    amount: 12000,
+    product: 'Premium Potatoes',
+    buyerName: 'Green Grocers Ltd',
+    status: 'pending',
+  },
+];
 
 const PaymentInfo = () => {
   const { toast } = useToast();
@@ -17,6 +47,8 @@ const PaymentInfo = () => {
     routingNumber: '',
     accountHolderName: '',
   });
+
+  const [payments] = useState(MOCK_PAYMENTS);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -50,7 +82,7 @@ const PaymentInfo = () => {
     <div>
       <h1 className="text-3xl font-bold mb-6">Payment Information</h1>
       
-      <Card>
+      <Card className="mb-6">
         <CardHeader>
           <CardTitle>Bank Account Details</CardTitle>
           <CardDescription>Enter your bank account details for receiving payments</CardDescription>
@@ -100,11 +132,11 @@ const PaymentInfo = () => {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="routingNumber">Routing Number</Label>
+                <Label htmlFor="routingNumber">IFSC Code</Label>
                 <Input 
                   id="routingNumber" 
                   name="routingNumber" 
-                  placeholder="Enter routing number" 
+                  placeholder="Enter IFSC code" 
                   value={formData.routingNumber} 
                   onChange={handleChange} 
                   required 
@@ -130,13 +162,39 @@ const PaymentInfo = () => {
         </form>
       </Card>
       
-      <Card className="mt-6">
+      <Card>
         <CardHeader>
           <CardTitle>Payment History</CardTitle>
           <CardDescription>Recent payments received</CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-center py-8 text-gray-500">No payment history to display</p>
+          {payments.length === 0 ? (
+            <p className="text-center py-8 text-gray-500">No payment history to display</p>
+          ) : (
+            <div className="space-y-4">
+              {payments.map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-medium">{payment.product}</p>
+                    <p className="text-sm text-gray-500">From: {payment.buyerName}</p>
+                    <p className="text-sm text-gray-500">Date: {new Date(payment.date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center justify-end font-semibold text-lg">
+                      <IndianRupee className="h-4 w-4 mr-1" />
+                      {payment.amount.toLocaleString()}
+                    </div>
+                    <Badge 
+                      variant={payment.status === 'completed' ? 'default' : 'outline'}
+                      className={payment.status === 'completed' ? 'bg-green-600' : ''}
+                    >
+                      {payment.status === 'completed' ? 'Completed' : 'Pending'}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

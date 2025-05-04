@@ -17,10 +17,12 @@ import FarmerDashboard from "./pages/farmer/Dashboard";
 import AddProduct from "./pages/farmer/AddProduct";
 import MyProducts from "./pages/farmer/MyProducts";
 import PaymentInfo from "./pages/farmer/PaymentInfo";
+import FarmerProfile from "./pages/farmer/Profile";
 import BuyerDashboard from "./pages/buyer/Dashboard";
 import BrowseProducts from "./pages/buyer/BrowseProducts";
 import MyBids from "./pages/buyer/MyBids";
 import PaymentDetails from "./pages/buyer/PaymentDetails";
+import BuyerProfile from "./pages/buyer/Profile";
 import CropDetail from "./pages/CropDetail";
 import MainLayout from "./layouts/MainLayout";
 
@@ -46,7 +48,9 @@ const App = () => (
                   <Route path="add-product" element={<AddProduct />} />
                   <Route path="my-products" element={<MyProducts />} />
                   <Route path="payment-info" element={<PaymentInfo />} />
+                  <Route path="profile" element={<FarmerProfile />} />
                   <Route path="product/:id" element={<CropDetail />} />
+                  <Route path="edit-product/:id" element={<AddProduct />} />
                 </Route>
 
                 {/* Buyer Routes */}
@@ -55,6 +59,7 @@ const App = () => (
                   <Route path="browse-products" element={<BrowseProducts />} />
                   <Route path="my-bids" element={<MyBids />} />
                   <Route path="payment-details" element={<PaymentDetails />} />
+                  <Route path="profile" element={<BuyerProfile />} />
                   <Route path="product/:id" element={<CropDetail />} />
                 </Route>
 

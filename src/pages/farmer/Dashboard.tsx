@@ -1,6 +1,7 @@
 
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { IndianRupee } from 'lucide-react';
 
 const FarmerDashboard = () => {
   const { user } = useAuth();
@@ -38,7 +39,9 @@ const FarmerDashboard = () => {
             <CardDescription>Your total earnings to date</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">$0.00</div>
+            <div className="text-3xl font-bold flex items-center">
+              <IndianRupee className="h-6 w-6 mr-1" />0.00
+            </div>
             <p className="text-sm text-gray-500">From 0 completed sales</p>
           </CardContent>
         </Card>
