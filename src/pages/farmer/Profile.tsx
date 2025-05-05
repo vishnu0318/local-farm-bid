@@ -1,5 +1,4 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { PRODUCT_TYPES } from '@/constants/productTypes';
@@ -7,24 +6,39 @@ import ProfilePhoto from '@/components/farmer/ProfilePhoto';
 import ProfileForm from '@/components/farmer/ProfileForm';
 
 const FarmerProfile = () => {
-  const { user } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const { toast } = useToast();
   
-  // Mock farmer profile data - in a real app, this would come from context or API
+  // Use profile data from auth context
   const [profileData, setProfileData] = useState({
-    name: 'Rajesh Kumar',
-    email: 'rajesh@example.com',
-    phone: '+91 98765 43210',
-    address: 'Village Greenfields, District Farmland, State Agricultural',
-    pinCode: '400001',
-    landSize: '5 acres',
-    landType: 'Irrigated',
-    mainCrops: 'Tomatoes, Potatoes, Onions',
-    farmingExperience: '15 years',
-    bio: 'Experienced farmer specializing in organic vegetable production with focus on sustainable farming practices.',
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    pinCode: '',
+    landSize: '',
+    landType: '',
+    mainCrops: '',
+    farmingExperience: '',
+    bio: '',
     profileImage: 'https://randomuser.me/api/portraits/men/72.jpg',
-    productTypes: ['vegetables', 'fruits', 'organic'],
+    productTypes: [] as string[],
   });
+
+  // Update local state when profile data is available
+  useEffect(() => {
+    if (profile) {
+      setProfileData(prev => ({
+        ...prev,
+        name: profile.name || '',
+        email: profile.email || '',
+        phone: profile.phone || '',
+        address: profile.address || '',
+        landSize: profile.landSize || '',
+        // Keep other fields as they are if not in profile
+      }));
+    }
+  }, [profile]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -52,17 +66,34 @@ const FarmerProfile = () => {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Here we would typically send the data to an API
     console.log('Profile data submitted:', profileData);
     
-    // Show success message
-    toast({
-      title: "Profile Updated",
-      description: "Your profile has been successfully updated.",
+    // Update profile in Supabase through AuthContext
+    const result = await updateProfile({
+      name: profileData.name,
+      email: profileData.email,
+      phone: profileData.phone,
+      address: profileData.address,
+      landSize: profileData.landSize,
     });
+
+    if (result.success) {
+      // Show success message
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been successfully updated.",
+      });
+    } else {
+      toast({
+        title: "Update Failed",
+        description: result.error || "Failed to update profile",
+        variant: "destructive",
+      });
+    }
   };
 
   return (

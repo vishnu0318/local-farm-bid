@@ -1,9 +1,9 @@
 
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Clock, MapPin, ArrowLeft, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useData, Bid } from '@/context/DataContext';
+import { useData, Bid as DataBid } from '@/context/DataContext';
 import { useLocation } from '@/context/LocationContext';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from "@/components/ui/button";
@@ -19,23 +19,33 @@ import {
 } from "@/components/ui/table";
 import Navigation from '@/components/Navigation';
 import BidForm from '@/components/BidForm';
+import { getProductById, getProductBids } from '@/services/productService';
+import { Product, Bid } from '@/services/productService';
 
 const CropDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const { crops, bids } = useData();
+  const { crops, bids } = useData(); // Keep for backwards compatibility
   const { toast } = useToast();
   const { currentLocation, calculateDistance } = useLocation();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
   
-  const [cropBids, setCropBids] = useState<Bid[]>([]);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [productBids, setProductBids] = useState<Bid[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // For backwards compatibility
+  const [cropBids, setCropBids] = useState<DataBid[]>([]);
   const crop = crops.find(c => c.id === id);
   
-  // Calculate time remaining until auction ends
+  // Calculate time remaining until auction ends (placeholder)
   const calculateTimeRemaining = () => {
-    if (!crop) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
+    if (!product) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
     
+    // Placeholder logic - in a real app, you would have actual bid end times
     const now = new Date();
-    const endTime = new Date(crop.endTime);
+    const endTime = new Date(now);
+    endTime.setDate(endTime.getDate() + 3); // Assume 3 days from now
     const timeDiff = endTime.getTime() - now.getTime();
     
     if (timeDiff <= 0) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
@@ -49,39 +59,81 @@ const CropDetail = () => {
   
   const [timeRemaining, setTimeRemaining] = useState(calculateTimeRemaining());
   
-  // Update time remaining every second
+  // Fetch product and bids
   useEffect(() => {
-    if (!crop) return;
+    const fetchProductData = async () => {
+      if (!id) return;
+      
+      setLoading(true);
+      
+      try {
+        // First try to get from Supabase
+        const productData = await getProductById(id);
+        
+        if (productData) {
+          setProduct(productData);
+          
+          // Fetch bids for this product (if available)
+          const bidsData = await getProductBids(id);
+          setProductBids(bidsData);
+        } else if (crop) {
+          // Fall back to context data if available
+          const filteredBids = bids.filter(bid => bid.cropId === id);
+          setCropBids(filteredBids.sort((a, b) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          ));
+        } else {
+          // No data found
+          toast({
+            title: "Product Not Found",
+            description: "The product you're looking for doesn't exist or has been removed.",
+            variant: "destructive"
+          });
+          navigate('/farmer/my-products');
+        }
+      } catch (error) {
+        console.error("Error fetching product:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load product details",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
     
+    fetchProductData();
+    
+    // Update time remaining every second
     const interval = setInterval(() => {
       setTimeRemaining(calculateTimeRemaining());
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [crop]);
+  }, [id, toast, navigate, crop, bids]);
   
-  // Get crop bids
-  useEffect(() => {
-    if (!id) return;
-    
-    const filteredBids = bids.filter(bid => bid.cropId === id);
-    
-    // Sort by timestamp (most recent first)
-    setCropBids(filteredBids.sort((a, b) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    ));
-  }, [id, bids]);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Navigation />
+        <main className="flex-1 flex items-center justify-center">
+          <p>Loading product details...</p>
+        </main>
+      </div>
+    );
+  }
   
-  if (!crop) {
+  if (!product && !crop) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navigation />
         <main className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Crop Not Found</h2>
-            <p className="text-gray-600 mb-4">The crop you're looking for doesn't exist or has been removed.</p>
-            <Link to="/marketplace">
-              <Button>Back to Marketplace</Button>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h2>
+            <p className="text-gray-600 mb-4">The product you're looking for doesn't exist or has been removed.</p>
+            <Link to="/farmer/my-products">
+              <Button>Back to My Products</Button>
             </Link>
           </div>
         </main>
@@ -89,7 +141,15 @@ const CropDetail = () => {
     );
   }
   
-  const distance = currentLocation ? 
+  // Use either Supabase product or context crop
+  const productTitle = product?.name || crop?.title || '';
+  const productDescription = product?.description || crop?.description || '';
+  const productImage = product?.image_url || crop?.image || '/placeholder.svg';
+  const productPrice = product?.price || crop?.basePrice || 0;
+  const productQuantity = product?.quantity || crop?.quantity || 0;
+  const productUnit = product?.unit || crop?.unit || 'kg';
+  
+  const distance = currentLocation && crop?.location ? 
     calculateDistance(
       currentLocation.latitude, 
       currentLocation.longitude, 
@@ -100,8 +160,8 @@ const CropDetail = () => {
     
   const formattedTime = `${timeRemaining.hours}h ${timeRemaining.minutes}m ${timeRemaining.seconds}s`;
   
-  // Check if current user is the farmer who posted this crop
-  const isOwner = user?.id === crop.farmerId;
+  // Check if current user is the farmer who posted this product
+  const isOwner = user?.id === (product?.farmer_id || crop?.farmerId);
   
   return (
     <div className="min-h-screen flex flex-col">
@@ -110,21 +170,21 @@ const CropDetail = () => {
       <main className="flex-1 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-6">
-            <Link to="/marketplace" className="flex items-center text-farmgreen-600 hover:text-farmgreen-700">
+            <Link to="/farmer/my-products" className="flex items-center text-farmgreen-600 hover:text-farmgreen-700">
               <ArrowLeft size={16} className="mr-1" />
-              Back to Marketplace
+              Back to My Products
             </Link>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left column - Crop details */}
+            {/* Left column - Product details */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg overflow-hidden shadow-sm">
-                {/* Crop image */}
+                {/* Product image */}
                 <div className="h-64 bg-gray-100 relative">
                   <img 
-                    src={crop.image} 
-                    alt={crop.title} 
+                    src={productImage} 
+                    alt={productTitle} 
                     className="w-full h-full object-cover"
                   />
                   {timeRemaining.isEnded ? (
@@ -144,23 +204,25 @@ const CropDetail = () => {
                   )}
                 </div>
                 
-                {/* Crop info */}
+                {/* Product info */}
                 <div className="p-6">
                   <div className="flex justify-between items-start">
-                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{crop.title}</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-1">{productTitle}</h1>
                     <div className="text-right">
                       <p className="text-sm text-gray-500">Base Price</p>
-                      <p className="text-xl font-semibold">₹{crop.basePrice}</p>
+                      <p className="text-xl font-semibold">₹{productPrice}</p>
                     </div>
                   </div>
                   
-                  <p className="text-sm text-gray-500 mb-4">by {crop.farmerName}</p>
+                  <p className="text-sm text-gray-500 mb-4">by {profile?.name || 'You'}</p>
                   
                   <div className="flex flex-wrap gap-4 mb-4">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <MapPin size={16} className="mr-1" />
-                      <span>{distance ? `${distance} km away` : 'Distance unknown'}</span>
-                    </div>
+                    {distance && (
+                      <div className="flex items-center text-sm text-gray-600">
+                        <MapPin size={16} className="mr-1" />
+                        <span>{distance ? `${distance} km away` : 'Distance unknown'}</span>
+                      </div>
+                    )}
                     
                     <div className="flex items-center text-sm text-gray-600">
                       <Clock size={16} className="mr-1" />
@@ -175,21 +237,18 @@ const CropDetail = () => {
                   
                   <div className="mb-6">
                     <h3 className="text-lg font-semibold mb-2">Description</h3>
-                    <p className="text-gray-700">{crop.description}</p>
+                    <p className="text-gray-700">{productDescription}</p>
                   </div>
                   
                   <div className="flex justify-between items-center p-4 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-sm text-gray-500">Quantity Available</p>
-                      <p className="text-lg font-semibold">{crop.quantity} {crop.unit}</p>
+                      <p className="text-lg font-semibold">{productQuantity} {productUnit}</p>
                     </div>
                     
                     <div className="text-right">
-                      <p className="text-sm text-gray-500">Current Bid</p>
-                      <p className="text-xl font-bold text-farmgreen-600">₹{crop.currentBid}</p>
-                      {crop.highestBidderName && (
-                        <p className="text-sm text-gray-500">by {crop.highestBidderName}</p>
-                      )}
+                      <p className="text-sm text-gray-500">Current Price</p>
+                      <p className="text-xl font-bold text-farmgreen-600">₹{productPrice}</p>
                     </div>
                   </div>
                 </div>
@@ -199,43 +258,34 @@ const CropDetail = () => {
               <div className="mt-8">
                 <Tabs defaultValue="bids">
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="bids">Bid History ({cropBids.length})</TabsTrigger>
-                    <TabsTrigger value="details">Crop Details</TabsTrigger>
+                    <TabsTrigger value="bids">Bid History</TabsTrigger>
+                    <TabsTrigger value="details">Product Details</TabsTrigger>
                   </TabsList>
                   
                   <TabsContent value="bids">
                     <Card className="p-6">
-                      {isOwner && !timeRemaining.isEnded && cropBids.length > 0 && (
-                        <div className="mb-6">
-                          <h3 className="text-lg font-semibold mb-4">Current Auction Status</h3>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Bidder</TableHead>
-                                <TableHead>Bid Amount</TableHead>
-                                <TableHead>Time</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {cropBids.slice(0, 5).map((bid) => (
-                                <TableRow key={bid.id}>
-                                  <TableCell className="font-medium">{bid.bidderName}</TableCell>
-                                  <TableCell className="text-farmgreen-600 font-bold">₹{bid.amount}</TableCell>
-                                  <TableCell>{new Date(bid.timestamp).toLocaleTimeString()}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                          {cropBids.length > 5 && (
-                            <p className="text-sm text-gray-500 mt-2 text-center">
-                              + {cropBids.length - 5} more bids
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      
-                      {cropBids.length > 0 ? (
+                      {/* Show bids from either source */}
+                      {(productBids.length > 0 || cropBids.length > 0) ? (
                         <div className="space-y-4">
+                          {productBids.map((bid) => (
+                            <div 
+                              key={bid.id} 
+                              className="flex justify-between items-center p-3 border-b last:border-0"
+                            >
+                              <div className="flex items-center">
+                                <User size={16} className="text-gray-400 mr-2" />
+                                <div>
+                                  <p className="font-medium">{bid.bidder_name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {new Date(bid.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-farmgreen-600">₹{bid.amount}</p>
+                              </div>
+                            </div>
+                          ))}
                           {cropBids.map((bid) => (
                             <div 
                               key={bid.id} 
@@ -268,16 +318,16 @@ const CropDetail = () => {
                     <Card className="p-6">
                       <div className="space-y-4">
                         <div>
-                          <h3 className="text-sm font-medium text-gray-500">Harvest Date</h3>
-                          <p>Within last 24 hours</p>
+                          <h3 className="text-sm font-medium text-gray-500">Category</h3>
+                          <p>{product?.category || 'N/A'}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-500">Growing Method</h3>
-                          <p>Organic, No Pesticides</p>
+                          <h3 className="text-sm font-medium text-gray-500">Listed On</h3>
+                          <p>{product?.created_at ? new Date(product.created_at).toLocaleDateString() : 'N/A'}</p>
                         </div>
                         <div>
-                          <h3 className="text-sm font-medium text-gray-500">Pickup/Delivery</h3>
-                          <p>Farm pickup available, Local delivery within 10km</p>
+                          <h3 className="text-sm font-medium text-gray-500">Status</h3>
+                          <p>{product?.available ? 'Available' : 'Not Available'}</p>
                         </div>
                       </div>
                     </Card>
@@ -286,100 +336,51 @@ const CropDetail = () => {
               </div>
             </div>
             
-            {/* Right column - Bid form or farmer view */}
+            {/* Right column - Actions */}
             <div className="lg:col-span-1">
-              {isOwner ? (
-                <Card className="p-6">
-                  <h3 className="font-semibold text-lg mb-4">Your Auction Status</h3>
+              <Card className="p-6">
+                <h3 className="font-semibold text-lg mb-4">Product Status</h3>
+                
+                <div className="space-y-4">
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">Current Status</p>
+                    <p className="font-semibold">
+                      {product?.available ? 'Active' : 'Inactive'}
+                    </p>
+                  </div>
                   
-                  <div className="space-y-4">
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-500">Auction Status</p>
-                      <p className="font-semibold">
-                        {timeRemaining.isEnded ? 'Ended' : 'Active'}
-                      </p>
-                    </div>
-                    
+                  {(productBids.length > 0 || cropBids.length > 0) && (
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <p className="text-sm text-gray-500">Total Bids</p>
-                      <p className="font-semibold">{cropBids.length}</p>
+                      <p className="font-semibold">{productBids.length || cropBids.length}</p>
                     </div>
-                    
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-500">Current Highest Bid</p>
-                      <p className="text-xl font-bold text-farmgreen-600">
-                        {crop.currentBid > crop.basePrice ? `₹${crop.currentBid}` : 'No bids yet'}
-                      </p>
-                      {crop.highestBidderName && (
-                        <p className="text-sm">by {crop.highestBidderName}</p>
-                      )}
-                    </div>
-                    
-                    {!timeRemaining.isEnded ? (
-                      <Button variant="outline" className="w-full">
-                        Edit Listing
-                      </Button>
-                    ) : crop.highestBidderName ? (
-                      <div className="space-y-4">
-                        <p className="font-medium">Auction Completed</p>
-                        <Button className="w-full">
-                          Contact Buyer
-                        </Button>
-                      </div>
-                    ) : (
-                      <p className="text-center text-amber-600">
-                        Auction ended without bids
-                      </p>
-                    )}
-                  </div>
-                </Card>
-              ) : !timeRemaining.isEnded ? (
-                <BidForm crop={crop} />
-              ) : (
-                <Card className="p-6 text-center">
-                  <h3 className="font-semibold text-lg mb-2">Auction Has Ended</h3>
-                  <p className="text-gray-600 mb-4">
-                    This auction has concluded and is no longer accepting bids.
-                  </p>
-                  {crop.highestBidderName ? (
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="text-sm text-gray-500">Winning Bid</p>
-                      <p className="text-xl font-bold text-farmgreen-600">₹{crop.currentBid}</p>
-                      <p className="text-sm">by {crop.highestBidderName}</p>
-                    </div>
-                  ) : (
-                    <p className="text-amber-600">
-                      No bids were placed for this item.
-                    </p>
                   )}
-                  <div className="mt-4">
-                    <Link to="/marketplace">
-                      <Button variant="outline" className="w-full">
-                        Browse More Crops
-                      </Button>
-                    </Link>
+                  
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-500">Listed Price</p>
+                    <p className="text-xl font-bold text-farmgreen-600">
+                      ₹{productPrice}
+                    </p>
                   </div>
-                </Card>
-              )}
-              
-              {/* Contact farmer card - only show for buyers */}
-              {!isOwner && (
-                <Card className="p-6 mt-6">
-                  <h3 className="font-semibold text-lg mb-2">About the Farmer</h3>
-                  <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
-                      <User size={20} />
-                    </div>
-                    <div className="ml-3">
-                      <p className="font-medium">{crop.farmerName}</p>
-                      <p className="text-sm text-gray-500">Joined 2023</p>
-                    </div>
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => navigate(`/farmer/edit-product/${id}`)}
+                    >
+                      Edit Product
+                    </Button>
+                    <Button 
+                      variant="default" 
+                      className="w-full"
+                      onClick={() => navigate('/farmer/my-products')}
+                    >
+                      Back to Products
+                    </Button>
                   </div>
-                  <Button variant="outline" className="w-full">
-                    Contact Farmer
-                  </Button>
-                </Card>
-              )}
+                </div>
+              </Card>
             </div>
           </div>
         </div>

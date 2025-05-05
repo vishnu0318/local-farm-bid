@@ -35,6 +35,7 @@ interface AuthContextType {
   isFarmer: () => boolean;
   isBuyer: () => boolean;
   loading: boolean;
+  updateProfile: (profileData: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -223,6 +224,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Add function to update profile
+  const updateProfile = async (profileData: Partial<Profile>): Promise<{ success: boolean; error?: string }> => {
+    if (!user) return { success: false, error: "Not authenticated" };
+    
+    try {
+      // Transform camelCase to snake_case for database
+      const dbData = {
+        name: profileData.name,
+        email: profileData.email,
+        phone: profileData.phone,
+        address: profileData.address,
+        land_size: profileData.landSize,
+        company_name: profileData.companyName,
+        preferred_categories: profileData.preferredCategories,
+      };
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(dbData)
+        .eq('id', user.id);
+        
+      if (error) {
+        console.error("Error updating profile:", error);
+        return { success: false, error: error.message };
+      }
+      
+      // Refresh profile data
+      await fetchUserProfile(user.id);
+      
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      return { success: false, error: error.message || "An unexpected error occurred" };
+    }
+  };
+
   // Helper functions to check user role
   const isFarmer = () => profile?.role === 'farmer';
   const isBuyer = () => profile?.role === 'buyer';
@@ -238,7 +275,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       register,
       isFarmer,
       isBuyer,
-      loading
+      loading,
+      updateProfile
     }}>
       {children}
     </AuthContext.Provider>

@@ -1,0 +1,127 @@
+
+import { supabase } from "@/integrations/supabase/client";
+
+export interface Product {
+  id: string;
+  name: string;
+  category: string;
+  subCategory?: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  description?: string;
+  status?: 'active' | 'pending';
+  image_url?: string;
+  farmer_id: string;
+  created_at?: string;
+  updated_at?: string;
+  available?: boolean;
+}
+
+export interface Bid {
+  id: string;
+  product_id: string;
+  bidder_id: string;
+  bidder_name: string;
+  amount: number;
+  created_at: string;
+}
+
+export const getProductById = async (productId: string): Promise<Product | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching product:', error);
+      return null;
+    }
+    
+    return data as Product;
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    return null;
+  }
+};
+
+export const getProductBids = async (productId: string): Promise<Bid[]> => {
+  try {
+    // This is a placeholder - in a real app, you would have a bids table
+    // and fetch actual bids for the product
+    const { data, error } = await supabase
+      .from('bids')
+      .select('*')
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching bids:', error);
+      return [];
+    }
+    
+    return data as Bid[];
+  } catch (error) {
+    console.error('Error fetching bids:', error);
+    return [];
+  }
+};
+
+export const addProduct = async (product: Omit<Product, 'id' | 'created_at' | 'updated_at'>): Promise<{ success: boolean; id?: string; error?: string }> => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .insert(product)
+      .select();
+    
+    if (error) {
+      console.error('Error adding product:', error);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true, id: data[0].id };
+  } catch (error: any) {
+    console.error('Error adding product:', error);
+    return { success: false, error: error.message || "An unexpected error occurred" };
+  }
+};
+
+export const updateProduct = async (id: string, product: Partial<Product>): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .update(product)
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error updating product:', error);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error updating product:', error);
+    return { success: false, error: error.message || "An unexpected error occurred" };
+  }
+};
+
+export const deleteProduct = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error deleting product:', error);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting product:', error);
+    return { success: false, error: error.message || "An unexpected error occurred" };
+  }
+};

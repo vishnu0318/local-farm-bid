@@ -1,67 +1,134 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Eye, Edit, Trash, Plus, Calendar, Clock, IndianRupee } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
-const MOCK_PRODUCTS = [
-  {
-    id: 'p1',
-    name: 'Organic Tomatoes',
-    category: 'vegetables',
-    subCategory: 'leafy',
-    quantity: '50',
-    unit: 'kg',
-    price: '200',
-    description: 'Fresh organic tomatoes grown without pesticides',
-    status: 'active',
-    bids: 3,
-    highestBid: '225',
-    imageUrl: 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
-    bidStart: '2025-05-01T10:00:00',
-    bidEnd: '2025-05-10T18:00:00',
-  },
-  {
-    id: 'p2',
-    name: 'Fresh Apples',
-    category: 'fruits',
-    subCategory: 'seasonal',
-    quantity: '100',
-    unit: 'kg',
-    price: '150',
-    description: 'Freshly harvested apples from our orchard',
-    status: 'pending',
-    bids: 0,
-    highestBid: null,
-    imageUrl: 'https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a',
-    bidStart: '2025-05-05T09:00:00',
-    bidEnd: '2025-05-15T17:00:00',
-  }
-];
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  subCategory?: string;
+  quantity: string | number;
+  unit: string;
+  price: string | number;
+  description: string;
+  status: 'active' | 'pending';
+  bids?: number;
+  highestBid?: string | number | null;
+  imageUrl?: string;
+  bidStart?: string;
+  bidEnd?: string;
+  farmer_id?: string;
+  created_at?: string;
+}
 
 const MyProducts = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const { user } = useAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleDelete = (productId: string) => {
-    // Filter out the deleted product
-    setProducts(products.filter(product => product.id !== productId));
-    
-    toast({
-      title: "Product Deleted",
-      description: "Your product has been successfully deleted.",
-    });
+  // Fetch products from Supabase
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchProducts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('farmer_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error fetching products:', error);
+          toast({
+            title: "Failed to load products",
+            description: error.message,
+            variant: "destructive"
+          });
+          return;
+        }
+
+        // Transform to our product format
+        const formattedProducts = data.map((item) => ({
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          unit: item.unit,
+          price: item.price,
+          description: item.description,
+          status: item.available ? 'active' : 'pending',
+          bids: 0, // This would come from a bids table in a real app
+          highestBid: null, // Same here
+          imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
+          farmer_id: item.farmer_id,
+          created_at: item.created_at,
+        }));
+
+        setProducts(formattedProducts);
+      } catch (err) {
+        console.error('Error fetching products:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [user, toast]);
+
+  const handleDelete = async (productId: string) => {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .delete()
+        .eq('id', productId);
+
+      if (error) {
+        console.error('Error deleting product:', error);
+        toast({
+          title: "Delete Failed",
+          description: error.message,
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Filter out the deleted product
+      setProducts(products.filter(product => product.id !== productId));
+      
+      toast({
+        title: "Product Deleted",
+        description: "Your product has been successfully deleted.",
+      });
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      toast({
+        title: "Delete Failed",
+        description: "An unexpected error occurred",
+        variant: "destructive"
+      });
+    }
   };
 
-  const handleEdit = (product) => {
+  const handleEdit = (product: Product) => {
     // Navigate to edit page with product data
     navigate(`/farmer/edit-product/${product.id}`, { 
       state: { product } 
     });
+  };
+  
+  const handleView = (productId: string) => {
+    // Navigate to product detail page
+    navigate(`/farmer/product/${productId}`);
   };
 
   return (
@@ -76,7 +143,11 @@ const MyProducts = () => {
         </Link>
       </div>
       
-      {products.length === 0 ? (
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <p>Loading your products...</p>
+        </div>
+      ) : products.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <p className="mb-4 text-center text-gray-500">You haven't listed any products yet</p>
@@ -107,20 +178,22 @@ const MyProducts = () => {
               </CardHeader>
               <CardContent>
                 <div className="mb-4">
-                  <div className="grid grid-cols-2 gap-2 mb-4">
-                    <div className="flex items-center text-gray-500 text-sm">
-                      <Calendar className="h-3 w-3 mr-1" />
-                      <span>
-                        {new Date(product.bidStart).toLocaleDateString()}
-                      </span>
+                  {product.bidStart && product.bidEnd && (
+                    <div className="grid grid-cols-2 gap-2 mb-4">
+                      <div className="flex items-center text-gray-500 text-sm">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        <span>
+                          {new Date(product.bidStart).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-end text-gray-500 text-sm">
+                        <Clock className="h-3 w-3 mr-1" />
+                        <span>
+                          {new Date(product.bidEnd).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-end text-gray-500 text-sm">
-                      <Clock className="h-3 w-3 mr-1" />
-                      <span>
-                        {new Date(product.bidEnd).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
+                  )}
                   
                   <div className="flex items-center justify-between mb-2">
                     <div>
@@ -130,7 +203,7 @@ const MyProducts = () => {
                         {product.price}/{product.unit}
                       </p>
                     </div>
-                    {product.bids > 0 && (
+                    {product.bids && product.bids > 0 && product.highestBid && (
                       <div className="text-right">
                         <p className="text-sm text-gray-500">Highest Bid</p>
                         <p className="text-lg font-medium text-green-600 flex items-center justify-end">
@@ -143,10 +216,14 @@ const MyProducts = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-500">
-                    {product.bids} {product.bids === 1 ? 'bid' : 'bids'}
+                    {product.bids || 0} {(product.bids || 0) === 1 ? 'bid' : 'bids'}
                   </p>
                   <div className="flex space-x-2">
-                    <Button variant="outline" size="icon">
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      onClick={() => handleView(product.id)}
+                    >
                       <Eye className="h-4 w-4" />
                     </Button>
                     <Button 
