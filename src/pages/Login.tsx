@@ -8,8 +8,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/context/AuthContext';
-import { IndianRupee, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { IndianRupee, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Login = () => {
   const { login, isAuthenticated, profile, loading } = useAuth();
@@ -26,6 +27,7 @@ const Login = () => {
   const [role, setRole] = useState<UserRole>(defaultRole);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // If user is already authenticated, redirect to the appropriate dashboard
   useEffect(() => {
@@ -35,21 +37,29 @@ const Login = () => {
     }
   }, [isAuthenticated, profile, navigate, loading]);
 
+  // Check if there's a registration success message in the URL
+  useEffect(() => {
+    const registrationSuccess = queryParams.get('registered');
+    if (registrationSuccess === 'true') {
+      toast({
+        title: "Registration Successful",
+        description: "Please check your email for a confirmation link before logging in.",
+      });
+    }
+  }, [queryParams, toast]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     
     if (!role) {
-      toast({
-        title: "Error",
-        description: "Please select your role",
-        variant: "destructive"
-      });
+      setErrorMessage("Please select your role");
       return;
     }
     
     try {
       setIsLoading(true);
-      const success = await login(email, password, role);
+      const { success, error } = await login(email, password, role);
       
       if (success) {
         toast({
@@ -59,19 +69,11 @@ const Login = () => {
         
         // Redirect based on role happens in the useEffect
       } else {
-        toast({
-          title: "Login Failed",
-          description: "Invalid email, password, or role. Please try again.",
-          variant: "destructive"
-        });
+        setErrorMessage(error || "Invalid email, password, or role. Please try again.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
-      toast({
-        title: "Login Failed",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive"
-      });
+      setErrorMessage("An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -131,6 +133,13 @@ const Login = () => {
             
             <form onSubmit={handleSubmit}>
               <CardContent className="space-y-4 relative z-10">
+                {errorMessage && (
+                  <Alert variant="destructive" className="border-red-500">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                  </Alert>
+                )}
+
                 <motion.div variants={itemVariants} className="space-y-2">
                   <Label htmlFor="role">I am a</Label>
                   <div className="grid grid-cols-2 gap-4">

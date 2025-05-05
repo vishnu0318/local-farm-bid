@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/context/AuthContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Register = () => {
   const { register } = useAuth();
@@ -18,6 +18,7 @@ const Register = () => {
   
   const [role, setRole] = useState<UserRole>('farmer');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Common form fields
   const [name, setName] = useState('');
@@ -44,22 +45,16 @@ const Register = () => {
   };
 
   const validateForm = () => {
+    setErrorMessage(null);
+    
     // Basic validation
     if (!name || !email || !password || !confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive"
-      });
+      setErrorMessage("Please fill in all required fields");
       return false;
     }
     
     if (password !== confirmPassword) {
-      toast({
-        title: "Error",
-        description: "Passwords do not match",
-        variant: "destructive"
-      });
+      setErrorMessage("Passwords do not match");
       return false;
     }
     
@@ -67,21 +62,13 @@ const Register = () => {
     if (role === 'farmer') {
       // Account number validation
       if (accountNumber !== confirmAccountNumber) {
-        toast({
-          title: "Error",
-          description: "Account numbers do not match",
-          variant: "destructive"
-        });
+        setErrorMessage("Account numbers do not match");
         return false;
       }
       
       // Check if all bank details are provided
       if (role === 'farmer' && (!accountHolderName || !accountNumber || !ifscCode || !bankName || !branchName)) {
-        toast({
-          title: "Error",
-          description: "Please complete all bank details",
-          variant: "destructive"
-        });
+        setErrorMessage("Please complete all bank details");
         return false;
       }
     }
@@ -115,30 +102,25 @@ const Register = () => {
       const result = await register(userData, password);
       
       if (result.success) {
-        // If registration was successful, we'll also need to add bank details for farmers
-        // This would normally be handled in the backend, but we're showing the concept here
-        
+        // If registration was successful
         toast({
           title: "Registration Successful",
-          description: "Your account has been created. Please login to continue.",
+          description: result.error || "Your account has been created successfully.",
         });
         
-        // Redirect to login page
-        navigate('/login');
+        // For farmer role, add bank details
+        if (role === 'farmer') {
+          // We would handle bank details here if we were storing them
+        }
+        
+        // Redirect to login page with a flag indicating successful registration
+        navigate('/login?registered=true');
       } else {
-        toast({
-          title: "Registration Failed",
-          description: result.error || "There was an error creating your account.",
-          variant: "destructive"
-        });
+        setErrorMessage(result.error || "There was an error creating your account.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Registration error:", error);
-      toast({
-        title: "Registration Failed",
-        description: "There was an error creating your account.",
-        variant: "destructive"
-      });
+      setErrorMessage("There was an error creating your account.");
     } finally {
       setIsLoading(false);
     }
@@ -160,6 +142,13 @@ const Register = () => {
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
+              {errorMessage && (
+                <Alert variant="destructive" className="border-red-500">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+              )}
+              
               <Tabs defaultValue="farmer" onValueChange={handleRoleChange}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="farmer">I am a Farmer</TabsTrigger>

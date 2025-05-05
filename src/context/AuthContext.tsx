@@ -29,7 +29,7 @@ interface AuthContextType {
   profile: Profile | null;
   session: Session | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
+  login: (email: string, password: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   register: (userData: Partial<Profile>, password: string) => Promise<{ success: boolean; error?: string }>;
   isFarmer: () => boolean;
@@ -49,6 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
+        console.log("Auth state changed:", event);
         setSession(newSession);
         if (newSession?.user) {
           // Add name to user object from metadata if available
@@ -121,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = async (email: string, password: string, role: UserRole): Promise<boolean> => {
+  const login = async (email: string, password: string, role: UserRole): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
     
     try {
@@ -133,7 +134,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) {
         console.error("Login error:", error.message);
         setLoading(false);
-        return false;
+        if (error.message.includes('Email not confirmed')) {
+          return { 
+            success: false, 
+            error: "Please confirm your email before logging in. Check your inbox for a confirmation link." 
+          };
+        }
+        return { success: false, error: error.message };
       }
 
       // Check if the user has the correct role
@@ -143,19 +150,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', data.user.id)
         .single();
 
-      if (profileError || profileData.role !== role) {
-        console.error("Role mismatch or profile not found");
+      if (profileError) {
+        console.error("Profile not found:", profileError.message);
         await logout();
         setLoading(false);
-        return false;
+        return { success: false, error: "Profile not found. Please register first." };
+      }
+
+      if (profileData.role !== role) {
+        console.error("Role mismatch");
+        await logout();
+        setLoading(false);
+        return { success: false, error: `This account is not registered as a ${role}. Please use the correct role.` };
       }
       
       setLoading(false);
-      return true;
-    } catch (error) {
+      return { success: true };
+    } catch (error: any) {
       console.error("Login error:", error);
       setLoading(false);
-      return false;
+      return { success: false, error: error.message || "An unexpected error occurred" };
     }
   };
 
@@ -178,7 +192,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           data: {
             name: userData.name,
             role: userData.role
-          }
+          },
+          emailRedirectTo: window.location.origin + '/login',
         }
       });
       
@@ -191,6 +206,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // The profile is created automatically via database trigger
       
       setLoading(false);
+
+      // Check if email confirmation is required
+      if (data?.user && !data.session) {
+        return { 
+          success: true, 
+          error: "Please check your email for a confirmation link before logging in." 
+        };
+      }
+      
       return { success: true };
     } catch (error: any) {
       console.error("Registration error:", error);
