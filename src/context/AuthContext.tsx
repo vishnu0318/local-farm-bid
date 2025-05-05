@@ -1,9 +1,11 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Session, User } from '@supabase/supabase-js';
 
 export type UserRole = 'farmer' | 'buyer' | null;
 
-interface User {
+interface Profile {
   id: string;
   name: string;
   email: string;
@@ -12,22 +14,19 @@ interface User {
   address?: string;
   // Farmer specific fields
   landSize?: string;
-  accountDetails?: string;
   // Buyer specific fields
   companyName?: string;
   preferredCategories?: string[];
-  location?: {
-    latitude: number;
-    longitude: number;
-  };
 }
 
 interface AuthContextType {
   user: User | null;
+  profile: Profile | null;
+  session: Session | null;
   isAuthenticated: boolean;
   login: (email: string, password: string, role: UserRole) => Promise<boolean>;
-  logout: () => void;
-  register: (userData: Partial<User>, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  register: (userData: Partial<Profile>, password: string) => Promise<{ success: boolean; error?: string }>;
   isFarmer: () => boolean;
   isBuyer: () => boolean;
   loading: boolean;
@@ -35,151 +34,165 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper function to generate unique IDs based on role
-const generateUserId = (role: UserRole): string => {
-  const timestamp = Date.now().toString().slice(-6);
-  const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  
-  if (role === 'farmer') {
-    return `F${timestamp}${random}`;
-  } else {
-    return `B${timestamp}${random}`;
-  }
-};
-
-// Mock database for users
-const mockDatabase = {
-  users: [
-    {
-      id: 'F123456',
-      name: 'Demo Farmer',
-      email: 'farmer@example.com',
-      password: 'password123',
-      role: 'farmer' as UserRole,
-      phone: '555-123-4567',
-      address: '123 Farm Road',
-      landSize: '5 acres',
-      accountDetails: 'Bank of Agriculture #12345'
-    },
-    {
-      id: 'B123456',
-      name: 'Demo Buyer',
-      email: 'buyer@example.com',
-      password: 'password123',
-      role: 'buyer' as UserRole,
-      phone: '555-123-4567',
-      address: '456 Market Street',
-      companyName: 'Local Market',
-      preferredCategories: ['Vegetables', 'Fruits']
-    }
-  ]
-};
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    // Check if we have a user in local storage
-    const savedUser = localStorage.getItem('goFreshUser');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading state for authentication check
-    setTimeout(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, newSession) => {
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+
+        if (newSession?.user) {
+          // Use setTimeout to prevent deadlocks
+          setTimeout(async () => {
+            await fetchUserProfile(newSession.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+        }
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+
+      if (currentSession?.user) {
+        fetchUserProfile(currentSession.user.id);
+      }
       setLoading(false);
-    }, 1000);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Enhanced login function that checks credentials
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        setProfile(null);
+        return;
+      }
+
+      // Transform database column names to camelCase for consistency
+      const transformedProfile: Profile = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: data.role as UserRole,
+        phone: data.phone,
+        address: data.address,
+        landSize: data.land_size,
+        companyName: data.company_name,
+        preferredCategories: data.preferred_categories
+      };
+
+      setProfile(transformedProfile);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      setProfile(null);
+    }
+  };
+
   const login = async (email: string, password: string, role: UserRole): Promise<boolean> => {
     setLoading(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check mock database for matching credentials
-    const foundUser = mockDatabase.users.find(
-      u => u.email === email && u.password === password && u.role === role
-    );
-    
-    if (foundUser) {
-      // Create user object without password for storage
-      const { password: _, ...safeUserData } = foundUser;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
       
-      // Ensure role is correctly typed as UserRole
-      const typedUserData: User = {
-        ...safeUserData,
-        role: safeUserData.role as UserRole
-      };
+      if (error) {
+        console.error("Login error:", error.message);
+        setLoading(false);
+        return false;
+      }
+
+      // Check if the user has the correct role
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || profileData.role !== role) {
+        console.error("Role mismatch or profile not found");
+        await logout();
+        setLoading(false);
+        return false;
+      }
       
-      // Save user to state and localStorage
-      setUser(typedUserData);
-      localStorage.setItem('goFreshUser', JSON.stringify(typedUserData));
       setLoading(false);
       return true;
+    } catch (error) {
+      console.error("Login error:", error);
+      setLoading(false);
+      return false;
     }
-    
-    setLoading(false);
-    return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('goFreshUser');
+    setProfile(null);
+    setSession(null);
   };
 
-  // Enhanced register function that saves to mock database
-  const register = async (userData: Partial<User>, password: string) => {
+  const register = async (userData: Partial<Profile>, password: string): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Generate appropriate ID based on role
-    const userId = generateUserId(userData.role as UserRole);
-    
-    // Create user with all provided data and the generated ID
-    const newUser = {
-      id: userId,
-      name: userData.name || '',
-      email: userData.email || '',
-      password: password,  // In a real app, this would be hashed
-      role: userData.role as UserRole,  // Ensure role is typed correctly
-      phone: userData.phone,
-      address: userData.address,
-      // Include role-specific fields if they exist
-      ...(userData.role === 'farmer' ? {
-        landSize: userData.landSize,
-        accountDetails: userData.accountDetails
-      } : {
-        companyName: userData.companyName,
-        preferredCategories: userData.preferredCategories
-      })
-    };
-    
-    // Add to mock database
-    mockDatabase.users.push(newUser);
-    
-    // Save user to state and localStorage (without password)
-    const { password: _, ...safeUserData } = newUser;
-    
-    // Ensure role is correctly typed as UserRole for the user state
-    const typedUserData: User = {
-      ...safeUserData,
-      role: safeUserData.role as UserRole
-    };
-    
-    setUser(typedUserData);
-    localStorage.setItem('goFreshUser', JSON.stringify(typedUserData));
-    setLoading(false);
+    try {
+      // Sign up the user with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({ 
+        email: userData.email as string, 
+        password,
+        options: {
+          data: {
+            name: userData.name,
+            role: userData.role
+          }
+        }
+      });
+      
+      if (error) {
+        console.error("Registration error:", error.message);
+        setLoading(false);
+        return { success: false, error: error.message };
+      }
+
+      // The profile is created automatically via database trigger
+      
+      setLoading(false);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      setLoading(false);
+      return { success: false, error: error.message || 'An unknown error occurred' };
+    }
   };
 
   // Helper functions to check user role
-  const isFarmer = () => user?.role === 'farmer';
-  const isBuyer = () => user?.role === 'buyer';
+  const isFarmer = () => profile?.role === 'farmer';
+  const isBuyer = () => profile?.role === 'buyer';
 
   return (
     <AuthContext.Provider value={{
       user,
+      profile,
+      session,
       isAuthenticated: !!user,
       login,
       logout,

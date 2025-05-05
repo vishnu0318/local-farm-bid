@@ -9,7 +9,132 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      bank_details: {
+        Row: {
+          account_holder_name: string
+          account_number: string
+          bank_name: string
+          branch_name: string
+          confirm_account_number: string
+          created_at: string
+          id: string
+          ifsc_code: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_holder_name: string
+          account_number: string
+          bank_name: string
+          branch_name: string
+          confirm_account_number: string
+          created_at?: string
+          id?: string
+          ifsc_code: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_holder_name?: string
+          account_number?: string
+          bank_name?: string
+          branch_name?: string
+          confirm_account_number?: string
+          created_at?: string
+          id?: string
+          ifsc_code?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          available: boolean | null
+          category: string
+          created_at: string
+          description: string | null
+          farmer_id: string
+          id: string
+          image_url: string | null
+          name: string
+          price: number
+          quantity: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          available?: boolean | null
+          category: string
+          created_at?: string
+          description?: string | null
+          farmer_id: string
+          id?: string
+          image_url?: string | null
+          name: string
+          price: number
+          quantity: number
+          unit: string
+          updated_at?: string
+        }
+        Update: {
+          available?: boolean | null
+          category?: string
+          created_at?: string
+          description?: string | null
+          farmer_id?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          price?: number
+          quantity?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          address: string | null
+          company_name: string | null
+          created_at: string
+          email: string
+          id: string
+          land_size: string | null
+          name: string
+          phone: string | null
+          preferred_categories: string[] | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          company_name?: string | null
+          created_at?: string
+          email: string
+          id: string
+          land_size?: string | null
+          name: string
+          phone?: string | null
+          preferred_categories?: string[] | null
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          company_name?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          land_size?: string | null
+          name?: string
+          phone?: string | null
+          preferred_categories?: string[] | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

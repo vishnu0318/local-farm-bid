@@ -12,7 +12,7 @@ import { IndianRupee, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const Login = () => {
-  const { login, isAuthenticated, user, loading } = useAuth();
+  const { login, isAuthenticated, profile, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -29,11 +29,11 @@ const Login = () => {
 
   // If user is already authenticated, redirect to the appropriate dashboard
   useEffect(() => {
-    if (isAuthenticated && !loading) {
-      const redirectPath = user?.role === 'farmer' ? '/farmer' : '/buyer';
+    if (isAuthenticated && !loading && profile) {
+      const redirectPath = profile.role === 'farmer' ? '/farmer' : '/buyer';
       navigate(redirectPath);
     }
-  }, [isAuthenticated, user, navigate, loading]);
+  }, [isAuthenticated, profile, navigate, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,12 +57,11 @@ const Login = () => {
           description: "Welcome back to Go Fresh!",
         });
         
-        // Redirect based on role
-        navigate(role === 'farmer' ? '/farmer' : '/buyer');
+        // Redirect based on role happens in the useEffect
       } else {
         toast({
           title: "Login Failed",
-          description: "Invalid email or password. Please try again.",
+          description: "Invalid email, password, or role. Please try again.",
           variant: "destructive"
         });
       }

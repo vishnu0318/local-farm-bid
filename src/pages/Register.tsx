@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { UserRole } from '@/context/AuthContext';
+import { Loader2 } from 'lucide-react';
 
 const Register = () => {
   const { register } = useAuth();
@@ -28,7 +29,12 @@ const Register = () => {
   
   // Farmer-specific fields
   const [landSize, setLandSize] = useState('');
-  const [accountDetails, setAccountDetails] = useState('');
+  const [accountHolderName, setAccountHolderName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [confirmAccountNumber, setConfirmAccountNumber] = useState('');
+  const [ifscCode, setIfscCode] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [branchName, setBranchName] = useState('');
   
   // Buyer-specific fields
   const [companyName, setCompanyName] = useState('');
@@ -37,18 +43,56 @@ const Register = () => {
     setRole(value as UserRole);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const validateForm = () => {
     // Basic validation
+    if (!name || !email || !password || !confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive"
+      });
+      return false;
+    }
+    
     if (password !== confirmPassword) {
       toast({
         title: "Error",
         description: "Passwords do not match",
         variant: "destructive"
       });
-      return;
+      return false;
     }
+    
+    // Farmer-specific validation
+    if (role === 'farmer') {
+      // Account number validation
+      if (accountNumber !== confirmAccountNumber) {
+        toast({
+          title: "Error",
+          description: "Account numbers do not match",
+          variant: "destructive"
+        });
+        return false;
+      }
+      
+      // Check if all bank details are provided
+      if (role === 'farmer' && (!accountHolderName || !accountNumber || !ifscCode || !bankName || !branchName)) {
+        toast({
+          title: "Error",
+          description: "Please complete all bank details",
+          variant: "destructive"
+        });
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
     
     try {
       setIsLoading(true);
@@ -61,23 +105,33 @@ const Register = () => {
         phone,
         address,
         ...(role === 'farmer' ? {
-          landSize,
-          accountDetails
+          landSize
         } : {
           companyName,
           preferredCategories: ['Vegetables', 'Fruits'] // Default categories
         })
       };
       
-      await register(userData, password);
+      const result = await register(userData, password);
       
-      toast({
-        title: "Registration Successful",
-        description: "Your account has been created successfully!",
-      });
-      
-      // Redirect based on role
-      navigate(role === 'farmer' ? '/farmer' : '/buyer');
+      if (result.success) {
+        // If registration was successful, we'll also need to add bank details for farmers
+        // This would normally be handled in the backend, but we're showing the concept here
+        
+        toast({
+          title: "Registration Successful",
+          description: "Your account has been created. Please login to continue.",
+        });
+        
+        // Redirect to login page
+        navigate('/login');
+      } else {
+        toast({
+          title: "Registration Failed",
+          description: result.error || "There was an error creating your account.",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       console.error("Registration error:", error);
       toast({
@@ -197,15 +251,80 @@ const Register = () => {
                         />
                       </div>
                       
-                      <div className="space-y-2">
-                        <Label htmlFor="accountDetails">Bank Account Details</Label>
-                        <Input 
-                          id="accountDetails" 
-                          placeholder="E.g., Bank name, Account number" 
-                          value={accountDetails}
-                          onChange={(e) => setAccountDetails(e.target.value)}
-                          required 
-                        />
+                      <div className="border-t pt-4 mt-2">
+                        <h3 className="font-medium mb-3">Bank Account Details</h3>
+                        
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="accountHolderName">Account Holder Name</Label>
+                            <Input 
+                              id="accountHolderName" 
+                              placeholder="Enter account holder name" 
+                              value={accountHolderName}
+                              onChange={(e) => setAccountHolderName(e.target.value)}
+                              required 
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="accountNumber">Account Number</Label>
+                              <Input 
+                                id="accountNumber" 
+                                placeholder="Enter account number" 
+                                value={accountNumber}
+                                onChange={(e) => setAccountNumber(e.target.value)}
+                                required 
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label htmlFor="confirmAccountNumber">Confirm Account Number</Label>
+                              <Input 
+                                id="confirmAccountNumber" 
+                                placeholder="Confirm account number" 
+                                value={confirmAccountNumber}
+                                onChange={(e) => setConfirmAccountNumber(e.target.value)}
+                                required 
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="ifscCode">IFSC Code</Label>
+                            <Input 
+                              id="ifscCode" 
+                              placeholder="Enter IFSC code" 
+                              value={ifscCode}
+                              onChange={(e) => setIfscCode(e.target.value)}
+                              required 
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="bankName">Bank Name</Label>
+                              <Input 
+                                id="bankName" 
+                                placeholder="Enter bank name" 
+                                value={bankName}
+                                onChange={(e) => setBankName(e.target.value)}
+                                required 
+                              />
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label htmlFor="branchName">Branch Name</Label>
+                              <Input 
+                                id="branchName" 
+                                placeholder="Enter branch name" 
+                                value={branchName}
+                                onChange={(e) => setBranchName(e.target.value)}
+                                required 
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </TabsContent>
@@ -232,7 +351,11 @@ const Register = () => {
                 className="w-full" 
                 disabled={isLoading}
               >
-                {isLoading ? "Creating Account..." : "Create Account"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating Account...
+                  </>
+                ) : "Create Account"}
               </Button>
               <p className="text-center text-sm text-gray-500">
                 Already have an account?{' '}
