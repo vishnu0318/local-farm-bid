@@ -55,7 +55,7 @@ const mockDatabase = {
       name: 'Demo Farmer',
       email: 'farmer@example.com',
       password: 'password123',
-      role: 'farmer',
+      role: 'farmer' as UserRole,
       phone: '555-123-4567',
       address: '123 Farm Road',
       landSize: '5 acres',
@@ -66,7 +66,7 @@ const mockDatabase = {
       name: 'Demo Buyer',
       email: 'buyer@example.com',
       password: 'password123',
-      role: 'buyer',
+      role: 'buyer' as UserRole,
       phone: '555-123-4567',
       address: '456 Market Street',
       companyName: 'Local Market',
@@ -106,9 +106,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Create user object without password for storage
       const { password: _, ...safeUserData } = foundUser;
       
+      // Ensure role is correctly typed as UserRole
+      const typedUserData: User = {
+        ...safeUserData,
+        role: safeUserData.role as UserRole
+      };
+      
       // Save user to state and localStorage
-      setUser(safeUserData);
-      localStorage.setItem('goFreshUser', JSON.stringify(safeUserData));
+      setUser(typedUserData);
+      localStorage.setItem('goFreshUser', JSON.stringify(typedUserData));
       setLoading(false);
       return true;
     }
@@ -137,7 +143,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       name: userData.name || '',
       email: userData.email || '',
       password: password,  // In a real app, this would be hashed
-      role: userData.role as UserRole,
+      role: userData.role as UserRole,  // Ensure role is typed correctly
       phone: userData.phone,
       address: userData.address,
       // Include role-specific fields if they exist
@@ -155,8 +161,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     // Save user to state and localStorage (without password)
     const { password: _, ...safeUserData } = newUser;
-    setUser(safeUserData);
-    localStorage.setItem('goFreshUser', JSON.stringify(safeUserData));
+    
+    // Ensure role is correctly typed as UserRole for the user state
+    const typedUserData: User = {
+      ...safeUserData,
+      role: safeUserData.role as UserRole
+    };
+    
+    setUser(typedUserData);
+    localStorage.setItem('goFreshUser', JSON.stringify(typedUserData));
     setLoading(false);
   };
 
