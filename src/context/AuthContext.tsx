@@ -1,9 +1,14 @@
 
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Session, User } from '@supabase/supabase-js';
+import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 
 export type UserRole = 'farmer' | 'buyer' | null;
+
+// Extend the Supabase User type to include our custom fields
+interface User extends SupabaseUser {
+  name?: string;
+}
 
 interface Profile {
   id: string;
@@ -45,14 +50,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, newSession) => {
         setSession(newSession);
-        setUser(newSession?.user ?? null);
-
         if (newSession?.user) {
+          // Add name to user object from metadata if available
+          const userWithName = {
+            ...newSession.user,
+            name: newSession.user.user_metadata?.name || '',
+          } as User;
+          setUser(userWithName);
+
           // Use setTimeout to prevent deadlocks
           setTimeout(async () => {
             await fetchUserProfile(newSession.user.id);
           }, 0);
         } else {
+          setUser(null);
           setProfile(null);
         }
       }
@@ -61,9 +72,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-
       if (currentSession?.user) {
+        // Add name to user object from metadata if available
+        const userWithName = {
+          ...currentSession.user,
+          name: currentSession.user.user_metadata?.name || '',
+        } as User;
+        setUser(userWithName);
         fetchUserProfile(currentSession.user.id);
       }
       setLoading(false);

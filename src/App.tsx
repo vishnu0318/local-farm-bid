@@ -1,4 +1,5 @@
 
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,55 +27,58 @@ import BuyerProfile from "./pages/buyer/Profile";
 import CropDetail from "./pages/CropDetail";
 import MainLayout from "./layouts/MainLayout";
 
+// Initialize QueryClient outside of component
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <LocationProvider>
-        <DataProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<SplashScreen />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-                
-                {/* Farmer Routes */}
-                <Route path="/farmer" element={<MainLayout userRole="farmer" />}>
-                  <Route index element={<FarmerDashboard />} />
-                  <Route path="add-product" element={<AddProduct />} />
-                  <Route path="my-products" element={<MyProducts />} />
-                  <Route path="payment-info" element={<PaymentInfo />} />
-                  <Route path="profile" element={<FarmerProfile />} />
-                  <Route path="product/:id" element={<CropDetail />} />
-                  <Route path="edit-product/:id" element={<AddProduct />} />
-                </Route>
+const App: React.FC = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <LocationProvider>
+          <DataProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<SplashScreen />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  
+                  {/* Farmer Routes */}
+                  <Route path="/farmer" element={<MainLayout userRole="farmer" />}>
+                    <Route index element={<FarmerDashboard />} />
+                    <Route path="add-product" element={<AddProduct />} />
+                    <Route path="my-products" element={<MyProducts />} />
+                    <Route path="payment-info" element={<PaymentInfo />} />
+                    <Route path="profile" element={<FarmerProfile />} />
+                    <Route path="product/:id" element={<CropDetail />} />
+                    <Route path="edit-product/:id" element={<AddProduct />} />
+                  </Route>
 
-                {/* Buyer Routes */}
-                <Route path="/buyer" element={<MainLayout userRole="buyer" />}>
-                  <Route index element={<BuyerDashboard />} />
-                  <Route path="browse-products" element={<BrowseProducts />} />
-                  <Route path="my-bids" element={<MyBids />} />
-                  <Route path="payment-details" element={<PaymentDetails />} />
-                  <Route path="profile" element={<BuyerProfile />} />
-                  <Route path="product/:id" element={<CropDetail />} />
-                </Route>
+                  {/* Buyer Routes */}
+                  <Route path="/buyer" element={<MainLayout userRole="buyer" />}>
+                    <Route index element={<BuyerDashboard />} />
+                    <Route path="browse-products" element={<BrowseProducts />} />
+                    <Route path="my-bids" element={<MyBids />} />
+                    <Route path="payment-details" element={<PaymentDetails />} />
+                    <Route path="profile" element={<BuyerProfile />} />
+                    <Route path="product/:id" element={<CropDetail />} />
+                  </Route>
 
-                {/* Redirect old marketplace route to appropriate dashboard based on role */}
-                <Route path="/marketplace" element={<Navigate to="/" />} />
-                
-                {/* Catch-all route */}
-                <Route path="*" element={<NotFoundCustom />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </DataProvider>
-      </LocationProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+                  {/* Redirect old marketplace route to appropriate dashboard based on role */}
+                  <Route path="/marketplace" element={<Navigate to="/" />} />
+                  
+                  {/* Catch-all route */}
+                  <Route path="*" element={<NotFoundCustom />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </DataProvider>
+        </LocationProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;
