@@ -43,8 +43,8 @@ const AddProduct = () => {
 
   useEffect(() => {
     if (editMode && editData) {
-      const bidStartDate = editData.bidStart ? new Date(editData.bidStart) : null;
-      const bidEndDate = editData.bidEnd ? new Date(editData.bidEnd) : null;
+      const bidStartDate = editData.bid_start ? new Date(editData.bid_start) : null;
+      const bidEndDate = editData.bid_end ? new Date(editData.bid_end) : null;
       
       const startHours = bidStartDate ? bidStartDate.getHours() : '';
       const startMinutes = bidStartDate ? bidStartDate.getMinutes() : '';

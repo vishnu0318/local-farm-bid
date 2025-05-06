@@ -51,6 +51,8 @@ export type Database = {
       products: {
         Row: {
           available: boolean | null
+          bid_end: string | null
+          bid_start: string | null
           category: string
           created_at: string
           description: string | null
@@ -66,6 +68,8 @@ export type Database = {
         }
         Insert: {
           available?: boolean | null
+          bid_end?: string | null
+          bid_start?: string | null
           category: string
           created_at?: string
           description?: string | null
@@ -81,6 +85,8 @@ export type Database = {
         }
         Update: {
           available?: boolean | null
+          bid_end?: string | null
+          bid_start?: string | null
           category?: string
           created_at?: string
           description?: string | null
