@@ -8,25 +8,7 @@ import { Eye, Edit, Trash, Plus, Calendar, Clock, IndianRupee } from 'lucide-rea
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  subCategory?: string;
-  quantity: string | number;
-  unit: string;
-  price: string | number;
-  description: string;
-  status: 'active' | 'pending';
-  bids?: number;
-  highestBid?: string | number | null;
-  imageUrl?: string;
-  bidStart?: string;
-  bidEnd?: string;
-  farmer_id?: string;
-  created_at?: string;
-}
+import { Product, deleteProduct } from '@/services/productService';
 
 const MyProducts = () => {
   const { toast } = useToast();
@@ -58,20 +40,19 @@ const MyProducts = () => {
         }
 
         // Transform to our product format
-        const formattedProducts = data.map((item) => ({
+        const formattedProducts: Product[] = data.map((item) => ({
           id: item.id,
           name: item.name,
           category: item.category,
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
-          description: item.description,
+          description: item.description || '',
           status: item.available ? 'active' : 'pending',
-          bids: 0, // This would come from a bids table in a real app
-          highestBid: null, // Same here
-          imageUrl: item.image_url || 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
+          image_url: item.image_url || 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
           farmer_id: item.farmer_id,
           created_at: item.created_at,
+          available: item.available
         }));
 
         setProducts(formattedProducts);
@@ -87,16 +68,13 @@ const MyProducts = () => {
 
   const handleDelete = async (productId: string) => {
     try {
-      const { error } = await supabase
-        .from('products')
-        .delete()
-        .eq('id', productId);
+      const result = await deleteProduct(productId);
 
-      if (error) {
-        console.error('Error deleting product:', error);
+      if (!result.success) {
+        console.error('Error deleting product:', result.error);
         toast({
           title: "Delete Failed",
-          description: error.message,
+          description: result.error,
           variant: "destructive"
         });
         return;
@@ -162,7 +140,7 @@ const MyProducts = () => {
             <Card key={product.id} className="overflow-hidden">
               <div className="aspect-w-16 aspect-h-9 relative">
                 <img 
-                  src={product.imageUrl} 
+                  src={product.image_url} 
                   alt={product.name} 
                   className="object-cover w-full h-48 rounded-t-lg"
                 />
@@ -178,23 +156,6 @@ const MyProducts = () => {
               </CardHeader>
               <CardContent>
                 <div className="mb-4">
-                  {product.bidStart && product.bidEnd && (
-                    <div className="grid grid-cols-2 gap-2 mb-4">
-                      <div className="flex items-center text-gray-500 text-sm">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        <span>
-                          {new Date(product.bidStart).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-end text-gray-500 text-sm">
-                        <Clock className="h-3 w-3 mr-1" />
-                        <span>
-                          {new Date(product.bidEnd).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <p className="text-sm text-gray-500">Base Price</p>
@@ -203,20 +164,11 @@ const MyProducts = () => {
                         {product.price}/{product.unit}
                       </p>
                     </div>
-                    {product.bids && product.bids > 0 && product.highestBid && (
-                      <div className="text-right">
-                        <p className="text-sm text-gray-500">Highest Bid</p>
-                        <p className="text-lg font-medium text-green-600 flex items-center justify-end">
-                          <IndianRupee className="h-4 w-4 mr-0.5" />
-                          {product.highestBid}/{product.unit}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-sm text-gray-500">
-                    {product.bids || 0} {(product.bids || 0) === 1 ? 'bid' : 'bids'}
+                    Added: {product.created_at ? new Date(product.created_at).toLocaleDateString() : 'Recently'}
                   </p>
                   <div className="flex space-x-2">
                     <Button 

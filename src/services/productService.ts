@@ -49,8 +49,13 @@ export const getProductById = async (productId: string): Promise<Product | null>
 
 export const getProductBids = async (productId: string): Promise<Bid[]> => {
   try {
-    // This is a placeholder - in a real app, you would have a bids table
-    // and fetch actual bids for the product
+    // Since we don't have a bids table yet, return an empty array
+    // In a real app, you would have a bids table to query
+    console.log('Fetching bids for product:', productId);
+    return [];
+    
+    // When you have a bids table, you can uncomment this:
+    /*
     const { data, error } = await supabase
       .from('bids')
       .select('*')
@@ -63,6 +68,7 @@ export const getProductBids = async (productId: string): Promise<Bid[]> => {
     }
     
     return data as Bid[];
+    */
   } catch (error) {
     console.error('Error fetching bids:', error);
     return [];
