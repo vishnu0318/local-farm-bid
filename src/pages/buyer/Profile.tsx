@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,25 +8,76 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2 } from 'lucide-react';
 
 const BuyerProfile = () => {
-  const { user } = useAuth();
+  const { user, profile: authProfile } = useAuth();
   const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Mock buyer profile data - in a real app, this would come from context or API
+  // Profile data state
   const [profileData, setProfileData] = useState({
-    name: 'Priya Sharma',
-    email: 'priya@freshmart.com',
-    phone: '+91 99876 54321',
-    address: '123 Green Avenue, Market District',
-    pinCode: '400002',
-    companyName: 'Fresh Mart Grocers',
-    businessType: 'Retail Chain',
-    preferredCategories: 'Organic Vegetables, Fresh Fruits',
-    purchaseVolume: 'Medium-Large (500+ kg weekly)',
-    bio: 'Sourcing manager for Fresh Mart chain of grocery stores. Looking for high quality, locally grown produce for our 8 locations in the region.',
-    profileImage: 'https://randomuser.me/api/portraits/women/65.jpg',
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    pinCode: '',
+    companyName: '',
+    businessType: '',
+    preferredCategories: '',
+    purchaseVolume: '',
+    bio: '',
+    profileImage: '',
   });
+
+  // Load profile data from Supabase
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) return;
+      
+      setIsLoading(true);
+      try {
+        // Get profile data
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+          
+        if (error) throw error;
+        
+        if (data) {
+          setProfileData({
+            name: data.name || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            address: data.address || '',
+            pinCode: data.address?.match(/(\d{6})/) ? data.address.match(/(\d{6})/)[1] : '',
+            companyName: data.company_name || '',
+            businessType: data.role || 'buyer',
+            preferredCategories: Array.isArray(data.preferred_categories) 
+              ? data.preferred_categories.join(', ')
+              : '',
+            purchaseVolume: '',
+            bio: '',
+            profileImage: user.user_metadata?.avatar_url || '',
+          });
+        }
+      } catch (error) {
+        console.error("Error loading profile:", error);
+        toast({
+          title: "Error loading profile",
+          description: "Failed to load your profile data. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadProfile();
+  }, [user, toast]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -36,18 +87,63 @@ const BuyerProfile = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Here we would typically send the data to an API
-    console.log('Profile data submitted:', profileData);
+    if (!user) return;
     
-    // Show success message
-    toast({
-      title: "Profile Updated",
-      description: "Your profile has been successfully updated.",
-    });
+    setIsLoading(true);
+    
+    try {
+      // Extract PIN code from address if not already included
+      let address = profileData.address;
+      if (profileData.pinCode && !address.includes(profileData.pinCode)) {
+        address = `${address}, ${profileData.pinCode}`;
+      }
+      
+      // Parse preferred categories from string to array
+      const preferredCategories = profileData.preferredCategories
+        ? profileData.preferredCategories.split(',').map(cat => cat.trim())
+        : [];
+      
+      // Update profile in Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: profileData.name,
+          phone: profileData.phone,
+          address: address,
+          company_name: profileData.companyName,
+          preferred_categories: preferredCategories
+        })
+        .eq('id', user.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been successfully updated.",
+      });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast({
+        title: "Update Failed",
+        description: "An error occurred while updating your profile.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  if (isLoading && !profileData.name) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+        <span className="ml-2">Loading your profile...</span>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -69,19 +165,19 @@ const BuyerProfile = () => {
             <div className="space-y-2">
               <div>
                 <span className="text-sm text-gray-500">Member Since</span>
-                <p>January 2023</p>
+                <p>{user?.created_at ? new Date(user.created_at).toLocaleDateString() : "N/A"}</p>
               </div>
               <div>
                 <span className="text-sm text-gray-500">Buyer ID</span>
-                <p>BUY-2023-0127</p>
+                <p>{user?.id ? user.id.substring(0, 8) : "N/A"}</p>
               </div>
               <div>
                 <span className="text-sm text-gray-500">Active Bids</span>
-                <p>3</p>
+                <p>-</p>
               </div>
               <div>
                 <span className="text-sm text-gray-500">Won Auctions</span>
-                <p>12</p>
+                <p>-</p>
               </div>
             </div>
           </CardContent>
@@ -115,6 +211,7 @@ const BuyerProfile = () => {
                     value={profileData.email} 
                     onChange={handleChange} 
                     required 
+                    disabled
                   />
                 </div>
                 
@@ -172,6 +269,7 @@ const BuyerProfile = () => {
                       name="businessType" 
                       value={profileData.businessType} 
                       onChange={handleChange} 
+                      disabled
                     />
                   </div>
                   
@@ -182,6 +280,7 @@ const BuyerProfile = () => {
                       name="preferredCategories" 
                       value={profileData.preferredCategories} 
                       onChange={handleChange} 
+                      placeholder="e.g. Vegetables, Fruits, Grains (comma separated)"
                     />
                   </div>
                   
@@ -191,7 +290,8 @@ const BuyerProfile = () => {
                       id="purchaseVolume" 
                       name="purchaseVolume" 
                       value={profileData.purchaseVolume} 
-                      onChange={handleChange} 
+                      onChange={handleChange}
+                      placeholder="e.g. Medium-Large (500+ kg weekly)" 
                     />
                   </div>
                   
@@ -202,7 +302,8 @@ const BuyerProfile = () => {
                       name="bio" 
                       value={profileData.bio} 
                       onChange={handleChange} 
-                      className="min-h-[100px]" 
+                      className="min-h-[100px]"
+                      placeholder="Tell farmers a bit about your business and buying preferences"
                     />
                   </div>
                 </div>

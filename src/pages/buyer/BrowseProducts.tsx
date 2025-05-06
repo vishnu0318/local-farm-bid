@@ -1,6 +1,6 @@
 
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,62 +8,182 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { Eye, IndianRupee } from 'lucide-react';
+import { Eye, IndianRupee, Clock, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useLocation as useLocationContext } from '@/context/LocationContext';
+import { useAuth } from '@/context/AuthContext';
+import { toast } from "sonner";
+import { formatDistance, differenceInSeconds } from 'date-fns';
 
-const MOCK_PRODUCTS = [
-  {
-    id: 'p1',
-    name: 'Organic Tomatoes',
-    category: 'vegetables',
-    farmer: 'Green Valley Farm',
-    quantity: '50',
-    unit: 'kg',
-    price: '200',
-    bids: 3,
-    highestBid: '225',
-    timeLeft: '2 days',
-    imageUrl: 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
-    bidEnd: '2025-05-10T18:00:00', // Added bid end time
-  },
-  {
-    id: 'p2',
-    name: 'Fresh Apples',
-    category: 'fruits',
-    farmer: 'Orchard Hills',
-    quantity: '100',
-    unit: 'kg',
-    price: '150',
-    bids: 5,
-    highestBid: '175',
-    timeLeft: '1 day',
-    imageUrl: 'https://images.unsplash.com/photo-1570913149827-d2ac84ab3f9a',
-    bidEnd: '2025-05-08T18:00:00',
-  },
-  {
-    id: 'p3',
-    name: 'Organic Carrots',
-    category: 'vegetables',
-    farmer: 'Sunny Fields',
-    quantity: '30',
-    unit: 'kg',
-    price: '120',
-    bids: 2,
-    highestBid: '135',
-    timeLeft: '3 days',
-    imageUrl: 'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37',
-    bidEnd: '2025-05-12T18:00:00',
-  },
-];
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  farmer_id: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  image_url: string | null;
+  bid_start: string | null;
+  bid_end: string | null;
+  farmer_name?: string;
+  distance?: number;
+  timeLeft?: string;
+  highest_bid?: number;
+  bids_count?: number;
+}
 
 const BrowseProducts = () => {
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const navigate = useNavigate();
+  const { currentLocation, requestLocationPermission, calculateDistance } = useLocationContext();
+  const { user } = useAuth();
+  
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [filters, setFilters] = useState({
     search: '',
     category: 'all',
-    maxPrice: [500], // Changed to a higher value in INR
+    maxPrice: [500],
     minBids: 0,
   });
+  const [isLoading, setIsLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
 
+  // Fetch products from Supabase
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setIsLoading(true);
+      
+      try {
+        // Fetch products that are available
+        const { data: productsData, error } = await supabase
+          .from('products')
+          .select(`
+            *,
+            profiles:farmer_id(name)
+          `)
+          .eq('available', true);
+        
+        if (error) throw error;
+
+        if (productsData) {
+          // Process products data
+          const productsWithMetadata = productsData.map((product: any) => ({
+            ...product,
+            farmer_name: product.profiles?.name || 'Unknown Farmer',
+            bids_count: 0,
+            highest_bid: 0,
+          }));
+          
+          // Calculate distance if location is available
+          if (currentLocation) {
+            const productsWithDistance = await Promise.all(productsWithMetadata.map(async (product: Product) => {
+              // Fetch farmer's location from profile
+              const { data: farmerProfile } = await supabase
+                .from('profiles')
+                .select('address')
+                .eq('id', product.farmer_id)
+                .single();
+              
+              // If we have location data, calculate distance
+              if (farmerProfile?.address) {
+                // Mock coordinates extraction - in a real app, you'd need to geocode the address
+                // or store lat/lng directly in the database
+                const mockLat = parseFloat(`18.${product.id.charCodeAt(0) % 10}${product.id.charCodeAt(1) % 10}`);
+                const mockLng = parseFloat(`73.${product.id.charCodeAt(2) % 10}${product.id.charCodeAt(3) % 10}`);
+                
+                const distance = calculateDistance(
+                  currentLocation.latitude,
+                  currentLocation.longitude,
+                  mockLat,
+                  mockLng
+                );
+                
+                return { ...product, distance };
+              }
+              
+              return product;
+            }));
+            
+            setProducts(productsWithDistance);
+          } else {
+            setProducts(productsWithMetadata);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+        toast.error('Failed to load products. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProducts();
+    
+    // Set up interval to update time remaining
+    const interval = setInterval(() => {
+      setProducts(prevProducts => prevProducts.map(product => ({
+        ...product,
+        timeLeft: getTimeRemaining(product.bid_end)
+      })));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentLocation, calculateDistance]);
+
+  // Filter products based on search, category, price, etc.
+  useEffect(() => {
+    let results = [...products];
+    
+    // Filter by search query
+    if (filters.search) {
+      const query = filters.search.toLowerCase();
+      results = results.filter(product => 
+        product.name.toLowerCase().includes(query) || 
+        product.category.toLowerCase().includes(query) ||
+        (product.farmer_name && product.farmer_name.toLowerCase().includes(query))
+      );
+    }
+    
+    // Filter by category
+    if (filters.category !== 'all') {
+      results = results.filter(product => product.category.toLowerCase() === filters.category.toLowerCase());
+    }
+    
+    // Filter by price
+    results = results.filter(product => product.price <= filters.maxPrice[0]);
+    
+    // Filter by distance if location is available
+    if (currentLocation) {
+      results = results.sort((a, b) => (a.distance || 999) - (b.distance || 999));
+    }
+    
+    // Filter active auctions
+    results = results.filter(product => {
+      const now = new Date();
+      const bidStart = product.bid_start ? new Date(product.bid_start) : null;
+      const bidEnd = product.bid_end ? new Date(product.bid_end) : null;
+      
+      // Only show products with active auctions or auctions that haven't started yet
+      return !bidEnd || now <= bidEnd;
+    });
+    
+    setFilteredProducts(results);
+  }, [products, filters, currentLocation]);
+
+  // Get time remaining until auction ends
+  const getTimeRemaining = (endTimeStr: string | null): string => {
+    if (!endTimeStr) return "No deadline";
+    
+    const endTime = new Date(endTimeStr);
+    const now = new Date();
+    
+    if (now >= endTime) return "Auction ended";
+    
+    return formatDistance(endTime, now, { addSuffix: false });
+  };
+
+  // Handle filter changes
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFilters({
       ...filters,
@@ -85,24 +205,14 @@ const BrowseProducts = () => {
     });
   };
 
-  // Check if bid is still active (not expired)
-  const isBidActive = (endTimeStr: string) => {
-    const endTime = new Date(endTimeStr);
-    const now = new Date();
-    return endTime > now;
+  const handleLocationRequest = async () => {
+    try {
+      await requestLocationPermission();
+      toast.success("Location access granted");
+    } catch (error) {
+      toast.error("Location access denied");
+    }
   };
-
-  // Filter active bids
-  const activeBids = products.filter(product => isBidActive(product.bidEnd));
-
-  // Filtered products based on search and filters
-  const filteredProducts = activeBids.filter(product => {
-    return (
-      product.name.toLowerCase().includes(filters.search.toLowerCase()) &&
-      (filters.category === 'all' || product.category === filters.category) && 
-      parseFloat(product.price) <= filters.maxPrice[0]
-    );
-  });
 
   return (
     <div>
@@ -147,7 +257,7 @@ const BrowseProducts = () => {
             <div className="space-y-2 md:col-span-2">
               <div className="flex justify-between">
                 <Label htmlFor="price">Max Price (₹ per unit)</Label>
-                <span>₹{filters.maxPrice[0].toFixed(2)}</span>
+                <span>₹{filters.maxPrice[0]}</span>
               </div>
               <Slider 
                 id="price"
@@ -159,68 +269,117 @@ const BrowseProducts = () => {
               />
             </div>
           </div>
+          
+          <div className="mt-4">
+            <Button 
+              variant="outline" 
+              onClick={handleLocationRequest}
+              className="flex items-center gap-2"
+              type="button"
+            >
+              {currentLocation ? "Update Location" : "Enable Location"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
       
-      {filteredProducts.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-center text-gray-500">No products found matching your criteria</p>
-          </CardContent>
-        </Card>
+      {/* Results count */}
+      <div className="mb-4 flex justify-between items-center">
+        <p className="text-sm text-gray-500">
+          {isLoading ? "Loading..." : `${filteredProducts.length} products available`}
+        </p>
+      </div>
+      
+      {/* Products grid */}
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-500 mb-4" />
+          <p className="text-gray-500">Loading products...</p>
+        </div>
+      ) : filteredProducts.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredProducts.map((product) => {
+            const now = new Date();
+            const bidStart = product.bid_start ? new Date(product.bid_start) : null;
+            const bidEnd = product.bid_end ? new Date(product.bid_end) : null;
+            
+            let auctionStatus = "No auction";
+            if (bidStart && bidEnd) {
+              if (now < bidStart) {
+                auctionStatus = "Starts soon";
+              } else if (now >= bidStart && now <= bidEnd) {
+                auctionStatus = "Active";
+              } else {
+                auctionStatus = "Ended";
+              }
+            }
+            
+            return (
+              <Card key={product.id}>
+                <div className="aspect-w-16 aspect-h-9 relative">
+                  <img 
+                    src={product.image_url || '/placeholder.svg'} 
+                    alt={product.name} 
+                    className="object-cover w-full h-48 rounded-t-lg"
+                  />
+                  <Badge className="absolute top-2 right-2">
+                    {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+                  </Badge>
+                  
+                  {bidStart && bidEnd && (
+                    <Badge className={`absolute bottom-2 right-2 ${auctionStatus === 'Active' ? 'bg-green-600' : 'bg-gray-600'}`}>
+                      {auctionStatus}
+                    </Badge>
+                  )}
+                </div>
+                <CardHeader>
+                  <CardTitle>{product.name}</CardTitle>
+                  <CardDescription>
+                    {product.distance ? `${product.distance.toFixed(1)} km away` : "Distance unknown"} • {product.quantity} {product.unit} available
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Base Price</p>
+                      <p className="text-lg font-medium flex items-center">
+                        <IndianRupee className="h-4 w-4 mr-0.5" />
+                        {product.price}/{product.unit}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500">Highest Bid</p>
+                      <p className="text-lg font-medium text-green-600 flex items-center justify-end">
+                        <IndianRupee className="h-4 w-4 mr-0.5" />
+                        {product.highest_bid || product.price}/{product.unit}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center">
+                      <Clock className="h-4 w-4 mr-1 text-gray-500" />
+                      <p className="text-sm text-gray-500">
+                        {product.timeLeft || getTimeRemaining(product.bid_end)}
+                      </p>
+                    </div>
+                    <Link to={`/buyer/product/${product.id}`}>
+                      <Button className="flex items-center gap-2">
+                        <Eye className="h-4 w-4" />
+                        <span>View Details</span>
+                      </Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredProducts.map((product) => (
-            <Card key={product.id}>
-              <div className="aspect-w-16 aspect-h-9 relative">
-                <img 
-                  src={product.imageUrl} 
-                  alt={product.name} 
-                  className="object-cover w-full h-48 rounded-t-lg"
-                />
-                <Badge className="absolute top-2 right-2">
-                  {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-                </Badge>
-              </div>
-              <CardHeader>
-                <CardTitle>{product.name}</CardTitle>
-                <CardDescription>
-                  By {product.farmer} · {product.quantity} {product.unit} available
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Base Price</p>
-                    <p className="text-lg font-medium flex items-center">
-                      <IndianRupee className="h-4 w-4 mr-0.5" />
-                      {product.price}/{product.unit}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">Highest Bid</p>
-                    <p className="text-lg font-medium text-green-600 flex items-center justify-end">
-                      <IndianRupee className="h-4 w-4 mr-0.5" />
-                      {product.highestBid}/{product.unit}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      {product.bids} {product.bids === 1 ? 'bid' : 'bids'} · {product.timeLeft} left
-                    </p>
-                  </div>
-                  <Link to={`/buyer/product/${product.id}`}>
-                    <Button className="flex items-center gap-2">
-                      <Eye className="h-4 w-4" />
-                      <span>View Details</span>
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <h3 className="text-lg font-medium text-gray-900 mb-1">No products found</h3>
+          <p className="text-gray-500">
+            Try adjusting your search or filters to see more results.
+          </p>
         </div>
       )}
     </div>
