@@ -5,7 +5,6 @@ export interface Product {
   id: string;
   name: string;
   category: string;
-  subCategory?: string;
   quantity: number;
   unit: string;
   price: number;
@@ -16,6 +15,8 @@ export interface Product {
   created_at?: string;
   updated_at?: string;
   available?: boolean;
+  bid_start?: string;
+  bid_end?: string;
 }
 
 export interface Bid {

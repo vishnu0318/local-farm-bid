@@ -21,6 +21,7 @@ import Navigation from '@/components/Navigation';
 import BidForm from '@/components/BidForm';
 import { getProductById, getProductBids } from '@/services/productService';
 import { Product, Bid } from '@/services/productService';
+import { format, formatDistance, differenceInSeconds, isBefore, isAfter } from 'date-fns';
 
 const CropDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,31 +34,28 @@ const CropDetail = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [productBids, setProductBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timeRemaining, setTimeRemaining] = useState({ hours: 0, minutes: 0, seconds: 0, isEnded: true });
   
   // For backwards compatibility
   const [cropBids, setCropBids] = useState<DataBid[]>([]);
   const crop = crops.find(c => c.id === id);
   
-  // Calculate time remaining until auction ends (placeholder)
-  const calculateTimeRemaining = () => {
-    if (!product) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
+  // Calculate time remaining until auction ends
+  const calculateTimeRemaining = (endTime: Date | null) => {
+    if (!endTime) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
     
-    // Placeholder logic - in a real app, you would have actual bid end times
     const now = new Date();
-    const endTime = new Date(now);
-    endTime.setDate(endTime.getDate() + 3); // Assume 3 days from now
-    const timeDiff = endTime.getTime() - now.getTime();
+    if (isBefore(endTime, now)) {
+      return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
+    }
     
-    if (timeDiff <= 0) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
-    
-    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
-    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+    const totalSeconds = differenceInSeconds(endTime, now);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
     
     return { hours, minutes, seconds, isEnded: false };
   };
-  
-  const [timeRemaining, setTimeRemaining] = useState(calculateTimeRemaining());
   
   // Fetch product and bids
   useEffect(() => {
@@ -72,6 +70,12 @@ const CropDetail = () => {
         
         if (productData) {
           setProduct(productData);
+          
+          // Set initial time remaining
+          if (productData.bid_end) {
+            const bidEndDate = new Date(productData.bid_end);
+            setTimeRemaining(calculateTimeRemaining(bidEndDate));
+          }
           
           // Fetch bids for this product (if available)
           const bidsData = await getProductBids(id);
@@ -107,11 +111,16 @@ const CropDetail = () => {
     
     // Update time remaining every second
     const interval = setInterval(() => {
-      setTimeRemaining(calculateTimeRemaining());
+      if (product?.bid_end) {
+        const bidEndDate = new Date(product.bid_end);
+        setTimeRemaining(calculateTimeRemaining(bidEndDate));
+      } else if (crop?.endTime) {
+        setTimeRemaining(calculateTimeRemaining(new Date(crop.endTime)));
+      }
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [id, toast, navigate, crop, bids]);
+  }, [id, toast, navigate, crop, bids, product?.bid_end]);
   
   if (loading) {
     return (
@@ -141,6 +150,26 @@ const CropDetail = () => {
     );
   }
   
+  // Get auction status
+  const getAuctionStatus = () => {
+    const now = new Date();
+    
+    if (product?.bid_start && product?.bid_end) {
+      const bidStart = new Date(product.bid_start);
+      const bidEnd = new Date(product.bid_end);
+      
+      if (isBefore(now, bidStart)) {
+        return `Auction starts ${formatDistance(bidStart, now, { addSuffix: true })}`;
+      } else if (isAfter(now, bidEnd)) {
+        return "Auction has ended";
+      } else {
+        return "Auction is active";
+      }
+    }
+    
+    return "No auction scheduled";
+  };
+  
   // Use either Supabase product or context crop
   const productTitle = product?.name || crop?.title || '';
   const productDescription = product?.description || crop?.description || '';
@@ -159,6 +188,7 @@ const CropDetail = () => {
     null;
     
   const formattedTime = `${timeRemaining.hours}h ${timeRemaining.minutes}m ${timeRemaining.seconds}s`;
+  const auctionStatus = getAuctionStatus();
   
   // Check if current user is the farmer who posted this product
   const isOwner = user?.id === (product?.farmer_id || crop?.farmerId);
@@ -228,7 +258,7 @@ const CropDetail = () => {
                       <Clock size={16} className="mr-1" />
                       <span>
                         {timeRemaining.isEnded 
-                          ? 'Auction has ended' 
+                          ? auctionStatus
                           : `Ends in ${formattedTime}`
                         }
                       </span>
@@ -329,6 +359,18 @@ const CropDetail = () => {
                           <h3 className="text-sm font-medium text-gray-500">Status</h3>
                           <p>{product?.available ? 'Available' : 'Not Available'}</p>
                         </div>
+                        {product?.bid_start && (
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-500">Bid Start Time</h3>
+                            <p>{new Date(product.bid_start).toLocaleString()}</p>
+                          </div>
+                        )}
+                        {product?.bid_end && (
+                          <div>
+                            <h3 className="text-sm font-medium text-gray-500">Bid End Time</h3>
+                            <p>{new Date(product.bid_end).toLocaleString()}</p>
+                          </div>
+                        )}
                       </div>
                     </Card>
                   </TabsContent>
@@ -345,9 +387,16 @@ const CropDetail = () => {
                   <div className="p-4 bg-gray-50 rounded-lg">
                     <p className="text-sm text-gray-500">Current Status</p>
                     <p className="font-semibold">
-                      {product?.available ? 'Active' : 'Inactive'}
+                      {auctionStatus}
                     </p>
                   </div>
+                  
+                  {!timeRemaining.isEnded && (
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-500">Time Remaining</p>
+                      <p className="font-semibold">{formattedTime}</p>
+                    </div>
+                  )}
                   
                   {(productBids.length > 0 || cropBids.length > 0) && (
                     <div className="p-4 bg-gray-50 rounded-lg">

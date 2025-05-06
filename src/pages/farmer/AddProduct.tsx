@@ -11,11 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, isAfter, startOfToday } from 'date-fns';
+import { format, isAfter, startOfToday, addHours } from 'date-fns';
 import { Calendar as CalendarIcon, Clock, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CATEGORIES, SUBCATEGORIES } from '@/constants/productCategories';
-import { MultiSelect, OptionType } from '@/components/ui/multi-select';
+import { CATEGORIES } from '@/constants/productCategories';
 import { addProduct, updateProduct } from '@/services/productService';
 
 const AddProduct = () => {
@@ -28,12 +27,9 @@ const AddProduct = () => {
   const editMode = id !== undefined;
   const editData = location.state?.product || null;
 
-  const [availableSubCategories, setAvailableSubCategories] = useState<OptionType[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     category: '',
-    subCategory: '',
-    selectedSubCategories: [] as string[],
     quantity: '',
     unit: 'kg',
     price: '',
@@ -61,8 +57,6 @@ const AddProduct = () => {
       setFormData({
         name: editData.name || '',
         category: editData.category || '',
-        subCategory: editData.subCategory || '',
-        selectedSubCategories: editData.subCategory ? editData.subCategory.split(',') : [],
         quantity: editData.quantity?.toString() || '',
         unit: editData.unit || 'kg',
         price: editData.price?.toString() || '',
@@ -73,14 +67,6 @@ const AddProduct = () => {
         bidEndTime: bidEndTime,
         imageUrl: editData.image_url || '',
       });
-      
-      // Set subcategories based on the category
-      if (editData.category) {
-        const filteredSubcategories = SUBCATEGORIES
-          .filter(sub => sub.categoryId === editData.category)
-          .map(sub => ({ value: sub.id, label: sub.label }));
-        setAvailableSubCategories(filteredSubcategories);
-      }
     }
   }, [editMode, editData]);
 
@@ -95,24 +81,7 @@ const AddProduct = () => {
   const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({
       ...prev,
-      [name]: value,
-      // If category changed, reset subcategory selections
-      ...(name === 'category' ? { selectedSubCategories: [] } : {})
-    }));
-    
-    // If category changed, update subcategories
-    if (name === 'category') {
-      const filteredSubcategories = SUBCATEGORIES
-        .filter(sub => sub.categoryId === value)
-        .map(sub => ({ value: sub.id, label: sub.label }));
-      setAvailableSubCategories(filteredSubcategories);
-    }
-  };
-
-  const handleSubcategoryChange = (selected: string[]) => {
-    setFormData(prev => ({
-      ...prev,
-      selectedSubCategories: selected
+      [name]: value
     }));
   };
 
@@ -142,24 +111,42 @@ const AddProduct = () => {
       });
       return;
     }
-    
-    // Join selected subcategories into a string or take the first one
-    const subCategory = formData.selectedSubCategories.length > 0 
-      ? formData.selectedSubCategories.join(',') 
-      : '';
+
+    // Set default bid dates if not provided
+    let bidStart = null;
+    let bidEnd = null;
+
+    if (formData.bidStartDate && formData.bidStartTime) {
+      const [hours, minutes] = formData.bidStartTime.split(':').map(Number);
+      bidStart = new Date(formData.bidStartDate);
+      bidStart.setHours(hours, minutes);
+    } else {
+      // Default to now
+      bidStart = new Date();
+    }
+
+    if (formData.bidEndDate && formData.bidEndTime) {
+      const [hours, minutes] = formData.bidEndTime.split(':').map(Number);
+      bidEnd = new Date(formData.bidEndDate);
+      bidEnd.setHours(hours, minutes);
+    } else if (bidStart) {
+      // Default to 24 hours from start if not provided
+      bidEnd = addHours(bidStart, 24);
+    }
     
     // Create the product object
     const productData = {
       name: formData.name,
       category: formData.category,
-      subCategory: subCategory,
       quantity: Number(formData.quantity),
       unit: formData.unit,
       price: Number(formData.price),
       description: formData.description,
       image_url: formData.imageUrl || 'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31',
       farmer_id: user.id,
-      available: true
+      available: true,
+      bid_start: bidStart?.toISOString(),
+      bid_end: bidEnd?.toISOString()
     };
 
     try {
@@ -242,18 +229,6 @@ const AddProduct = () => {
                 </Select>
               </div>
               
-              {formData.category && (
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="subCategory">Sub-Category</Label>
-                  <MultiSelect
-                    options={availableSubCategories || []}
-                    selected={formData.selectedSubCategories || []}
-                    onChange={handleSubcategoryChange}
-                    placeholder="Select subcategories"
-                  />
-                </div>
-              )}
-              
               <div className="space-y-2">
                 <Label htmlFor="quantity">Quantity</Label>
                 <Input 
@@ -309,6 +284,90 @@ const AddProduct = () => {
                   value={formData.imageUrl} 
                   onChange={handleChange} 
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bidStartDate">Bid Start Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="bidStartDate"
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.bidStartDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.bidStartDate ? format(formData.bidStartDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={formData.bidStartDate || undefined}
+                      onSelect={(date) => handleDateChange('bidStartDate', date)}
+                      disabled={(date) => date < today}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bidStartTime">Bid Start Time</Label>
+                <div className="flex items-center">
+                  <Clock className="mr-2 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="bidStartTime"
+                    name="bidStartTime"
+                    type="time"
+                    value={formData.bidStartTime}
+                    onChange={handleTimeChange}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bidEndDate">Bid End Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="bidEndDate"
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !formData.bidEndDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formData.bidEndDate ? format(formData.bidEndDate, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0">
+                    <Calendar
+                      mode="single"
+                      selected={formData.bidEndDate || undefined}
+                      onSelect={(date) => handleDateChange('bidEndDate', date)}
+                      disabled={(date) => date < today}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bidEndTime">Bid End Time</Label>
+                <div className="flex items-center">
+                  <Clock className="mr-2 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="bidEndTime"
+                    name="bidEndTime"
+                    type="time"
+                    value={formData.bidEndTime}
+                    onChange={handleTimeChange}
+                  />
+                </div>
               </div>
             </div>
 
