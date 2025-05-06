@@ -53,7 +53,6 @@ const MyProducts = () => {
           id: item.id,
           name: item.name,
           category: item.category,
-          subCategory: item.subCategory,
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
@@ -162,6 +161,7 @@ const MyProducts = () => {
                 <CardTitle className="text-base sm:text-lg">{product.name}</CardTitle>
                 <CardDescription className="text-sm">
                   {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+                  {/* Only render subcategory if it exists */}
                   {product.subCategory ? ` • ${product.subCategory}` : ''} • {product.quantity} {product.unit}
                 </CardDescription>
               </CardHeader>
