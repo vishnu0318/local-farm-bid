@@ -60,6 +60,7 @@ export type Database = {
           name: string
           price: number
           quantity: number
+          subCategory: string | null
           unit: string
           updated_at: string
         }
@@ -74,6 +75,7 @@ export type Database = {
           name: string
           price: number
           quantity: number
+          subCategory?: string | null
           unit: string
           updated_at?: string
         }
@@ -88,6 +90,7 @@ export type Database = {
           name?: string
           price?: number
           quantity?: number
+          subCategory?: string | null
           unit?: string
           updated_at?: string
         }
