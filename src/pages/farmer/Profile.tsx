@@ -1,13 +1,15 @@
+
 import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { PRODUCT_TYPES } from '@/constants/productTypes';
+import { CATEGORIES } from '@/constants/productCategories';
 import ProfilePhoto from '@/components/farmer/ProfilePhoto';
 import ProfileForm from '@/components/farmer/ProfileForm';
 
 const FarmerProfile = () => {
   const { user, profile, updateProfile } = useAuth();
   const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
   
   // Use profile data from auth context
   const [profileData, setProfileData] = useState({
@@ -28,12 +30,14 @@ const FarmerProfile = () => {
   // Update local state when profile data is available
   useEffect(() => {
     if (profile) {
+      console.log("Profile data loaded:", profile);
       setProfileData(prev => ({
         ...prev,
         name: profile.name || '',
         email: profile.email || '',
         phone: profile.phone || '',
         address: profile.address || '',
+        pinCode: profile.address?.match(/(\d{6})/) ? profile.address.match(/(\d{6})/)[0] : '',
         landSize: profile.landSize || '',
         // Keep other fields as they are if not in profile
       }));
@@ -68,19 +72,26 @@ const FarmerProfile = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
     
-    // Here we would typically send the data to an API
-    console.log('Profile data submitted:', profileData);
+    // Combine address and pincode
+    const combinedAddress = profileData.address 
+      ? (profileData.address.includes(profileData.pinCode) 
+          ? profileData.address 
+          : `${profileData.address}, ${profileData.pinCode}`)
+      : '';
     
     // Update profile in Supabase through AuthContext
     const result = await updateProfile({
       name: profileData.name,
       email: profileData.email,
       phone: profileData.phone,
-      address: profileData.address,
+      address: combinedAddress,
       landSize: profileData.landSize,
     });
 
+    setLoading(false);
+    
     if (result.success) {
       // Show success message
       toast({
@@ -97,8 +108,8 @@ const FarmerProfile = () => {
   };
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-6">My Profile</h1>
+    <div className="w-full px-2 sm:px-0">
+      <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6">My Profile</h1>
       
       <div className="grid gap-6 md:grid-cols-3">
         <ProfilePhoto 
@@ -108,10 +119,11 @@ const FarmerProfile = () => {
         
         <ProfileForm 
           profileData={profileData}
-          productTypeOptions={PRODUCT_TYPES}
+          productTypeOptions={CATEGORIES}
           onChange={handleChange}
           onToggleProductType={toggleProductType}
           onSubmit={handleSubmit}
+          loading={loading}
         />
       </div>
     </div>

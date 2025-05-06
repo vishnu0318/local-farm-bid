@@ -25,6 +25,7 @@ interface ProfileFormProps {
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onToggleProductType: (productTypeId: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  loading?: boolean;
 }
 
 const ProfileForm = ({ 
@@ -32,10 +33,11 @@ const ProfileForm = ({
   productTypeOptions,
   onChange, 
   onToggleProductType, 
-  onSubmit 
+  onSubmit,
+  loading = false
 }: ProfileFormProps) => {
   return (
-    <Card className="md:col-span-2">
+    <Card className="md:col-span-2 w-full">
       <CardHeader>
         <CardTitle>Personal Information</CardTitle>
         <CardDescription>Update your personal and farm details</CardDescription>
@@ -66,7 +68,9 @@ const ProfileForm = ({
         <CardFooter>
           <div className="flex gap-2 w-full sm:w-auto">
             <Button variant="outline" type="button">Cancel</Button>
-            <Button type="submit">Save Changes</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? 'Saving...' : 'Save Changes'}
+            </Button>
           </div>
         </CardFooter>
       </form>

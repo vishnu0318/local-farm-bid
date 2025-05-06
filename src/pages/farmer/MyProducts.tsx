@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Edit, Trash, Plus, Calendar, Clock, IndianRupee } from 'lucide-react';
+import { Eye, Edit, Trash, Plus, IndianRupee } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +23,7 @@ const MyProducts = () => {
 
     const fetchProducts = async () => {
       try {
+        console.log("Fetching products for user:", user.id);
         const { data, error } = await supabase
           .from('products')
           .select('*')
@@ -39,11 +40,20 @@ const MyProducts = () => {
           return;
         }
 
+        console.log("Products fetched:", data);
+        
+        if (!data || data.length === 0) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
+
         // Transform to our product format
         const formattedProducts: Product[] = data.map((item) => ({
           id: item.id,
           name: item.name,
           category: item.category,
+          subCategory: item.subCategory,
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
@@ -110,11 +120,11 @@ const MyProducts = () => {
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">My Products</h1>
+    <div className="w-full">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold">My Products</h1>
         <Link to="/farmer/add-product">
-          <Button className="flex items-center gap-2">
+          <Button className="flex items-center gap-2 w-full sm:w-auto">
             <Plus className="h-4 w-4" />
             <span>Add New Product</span>
           </Button>
@@ -135,63 +145,66 @@ const MyProducts = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {products.map((product) => (
             <Card key={product.id} className="overflow-hidden">
               <div className="aspect-w-16 aspect-h-9 relative">
                 <img 
                   src={product.image_url} 
                   alt={product.name} 
-                  className="object-cover w-full h-48 rounded-t-lg"
+                  className="object-cover w-full h-32 sm:h-48 rounded-t-lg"
                 />
                 <Badge className="absolute top-2 right-2" variant={product.status === 'active' ? 'default' : 'outline'}>
                   {product.status === 'active' ? 'Active' : 'Pending'}
                 </Badge>
               </div>
-              <CardHeader>
-                <CardTitle>{product.name}</CardTitle>
-                <CardDescription>
-                  {product.category.charAt(0).toUpperCase() + product.category.slice(1)} · {product.quantity} {product.unit}
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-base sm:text-lg">{product.name}</CardTitle>
+                <CardDescription className="text-sm">
+                  {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
+                  {product.subCategory ? ` • ${product.subCategory}` : ''} • {product.quantity} {product.unit}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
+              <CardContent className="py-2 px-4">
+                <div className="mb-3">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-gray-500">Base Price</p>
-                      <p className="text-lg font-medium flex items-center">
-                        <IndianRupee className="h-4 w-4 mr-0.5" />
+                      <p className="text-xs sm:text-sm text-gray-500">Base Price</p>
+                      <p className="text-base sm:text-lg font-medium flex items-center">
+                        <IndianRupee className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5" />
                         {product.price}/{product.unit}
                       </p>
                     </div>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs sm:text-sm text-gray-500">
                     Added: {product.created_at ? new Date(product.created_at).toLocaleDateString() : 'Recently'}
                   </p>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-1 sm:space-x-2">
                     <Button 
                       variant="outline" 
-                      size="icon"
+                      size="sm"
+                      className="w-8 h-8 p-0"
                       onClick={() => handleView(product.id)}
                     >
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                     <Button 
                       variant="outline" 
-                      size="icon" 
+                      size="sm"
+                      className="w-8 h-8 p-0"
                       onClick={() => handleEdit(product)}
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                     <Button 
                       variant="outline" 
-                      size="icon" 
-                      className="text-red-500 hover:text-red-600"
+                      size="sm"
+                      className="w-8 h-8 p-0 text-red-500 hover:text-red-600"
                       onClick={() => handleDelete(product.id)}
                     >
-                      <Trash className="h-4 w-4" />
+                      <Trash className="h-3 w-3 sm:h-4 sm:w-4" />
                     </Button>
                   </div>
                 </div>
