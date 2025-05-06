@@ -53,7 +53,8 @@ const MyProducts = () => {
           id: item.id,
           name: item.name,
           category: item.category,
-          subCategory: item.subCategory,
+          // Handle subCategory as optional - it might not exist in the database
+          subCategory: item.subCategory || '',
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
