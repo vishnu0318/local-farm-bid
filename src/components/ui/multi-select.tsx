@@ -31,8 +31,8 @@ interface MultiSelectProps {
 }
 
 export function MultiSelect({
-  options,
-  selected,
+  options = [], // Provide a default empty array to prevent undefined
+  selected = [], // Provide a default empty array to prevent undefined
   onChange,
   className,
   placeholder = "Select options...",
@@ -90,7 +90,10 @@ export function MultiSelect({
                         e.preventDefault();
                         e.stopPropagation();
                       }}
-                      onClick={() => handleUnselect(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUnselect(item);
+                      }}
                     >
                       <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                     </button>
@@ -107,7 +110,7 @@ export function MultiSelect({
           <CommandInput placeholder="Search..." />
           <CommandEmpty>No options found.</CommandEmpty>
           <CommandGroup className="max-h-64 overflow-auto">
-            {options.map((option) => (
+            {options && options.map((option) => (
               <CommandItem
                 key={option.value}
                 onSelect={() => handleSelect(option.value)}

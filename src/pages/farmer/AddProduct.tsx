@@ -15,7 +15,7 @@ import { format, isAfter, startOfToday } from 'date-fns';
 import { Calendar as CalendarIcon, Clock, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORIES, SUBCATEGORIES } from '@/constants/productCategories';
-import { MultiSelect } from '@/components/ui/multi-select';
+import { MultiSelect, OptionType } from '@/components/ui/multi-select';
 import { addProduct, updateProduct } from '@/services/productService';
 
 const AddProduct = () => {
@@ -28,7 +28,7 @@ const AddProduct = () => {
   const editMode = id !== undefined;
   const editData = location.state?.product || null;
 
-  const [availableSubCategories, setAvailableSubCategories] = useState([]);
+  const [availableSubCategories, setAvailableSubCategories] = useState<OptionType[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -47,8 +47,8 @@ const AddProduct = () => {
 
   useEffect(() => {
     if (editMode && editData) {
-      const bidStartDate = new Date(editData.bidStart) || null;
-      const bidEndDate = new Date(editData.bidEnd) || null;
+      const bidStartDate = editData.bidStart ? new Date(editData.bidStart) : null;
+      const bidEndDate = editData.bidEnd ? new Date(editData.bidEnd) : null;
       
       const startHours = bidStartDate ? bidStartDate.getHours() : '';
       const startMinutes = bidStartDate ? bidStartDate.getMinutes() : '';
@@ -62,7 +62,7 @@ const AddProduct = () => {
         name: editData.name || '',
         category: editData.category || '',
         subCategory: editData.subCategory || '',
-        selectedSubCategories: editData.subCategory ? [editData.subCategory] : [],
+        selectedSubCategories: editData.subCategory ? editData.subCategory.split(',') : [],
         quantity: editData.quantity?.toString() || '',
         unit: editData.unit || 'kg',
         price: editData.price?.toString() || '',
@@ -246,8 +246,8 @@ const AddProduct = () => {
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="subCategory">Sub-Category</Label>
                   <MultiSelect
-                    options={availableSubCategories}
-                    selected={formData.selectedSubCategories}
+                    options={availableSubCategories || []}
+                    selected={formData.selectedSubCategories || []}
                     onChange={handleSubcategoryChange}
                     placeholder="Select subcategories"
                   />
