@@ -13,25 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useLocation as useLocationContext } from '@/context/LocationContext';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from "sonner";
-import { formatDistance, differenceInSeconds } from 'date-fns';
-
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  farmer_id: string;
-  quantity: number;
-  unit: string;
-  price: number;
-  image_url: string | null;
-  bid_start: string | null;
-  bid_end: string | null;
-  farmer_name?: string;
-  distance?: number;
-  timeLeft?: string;
-  highest_bid?: number;
-  bids_count?: number;
-}
+import { Product } from '@/types/marketplace';
 
 const BrowseProducts = () => {
   const navigate = useNavigate();
@@ -47,7 +29,6 @@ const BrowseProducts = () => {
     minBids: 0,
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Fetch products from Supabase
   useEffect(() => {
@@ -58,26 +39,34 @@ const BrowseProducts = () => {
         // Fetch products that are available
         const { data: productsData, error } = await supabase
           .from('products')
-          .select(`
-            *,
-            profiles:farmer_id(name)
-          `)
+          .select('*')
           .eq('available', true);
         
         if (error) throw error;
 
         if (productsData) {
-          // Process products data
-          const productsWithMetadata = productsData.map((product: any) => ({
-            ...product,
-            farmer_name: product.profiles?.name || 'Unknown Farmer',
-            bids_count: 0,
-            highest_bid: 0,
-          }));
-          
-          // Calculate distance if location is available
-          if (currentLocation) {
-            const productsWithDistance = await Promise.all(productsWithMetadata.map(async (product: Product) => {
+          // Process products to include additional metadata
+          const productsWithMetadata = await Promise.all(productsData.map(async (product: Product) => {
+            // Fetch farmer name
+            const { data: farmerData } = await supabase
+              .from('profiles')
+              .select('name')
+              .eq('id', product.farmer_id)
+              .single();
+            
+            // Fetch bids count and highest bid
+            const { data: bidsData, error: bidsError } = await supabase
+              .from('bids')
+              .select('amount')
+              .eq('product_id', product.id)
+              .order('amount', { ascending: false });
+            
+            const highestBid = bidsData && bidsData.length > 0 ? bidsData[0].amount : null;
+            const bidsCount = bidsData ? bidsData.length : 0;
+            
+            // Calculate distance if we have user's location
+            let distance: number | undefined = undefined;
+            if (currentLocation) {
               // Fetch farmer's location from profile
               const { data: farmerProfile } = await supabase
                 .from('profiles')
@@ -85,30 +74,31 @@ const BrowseProducts = () => {
                 .eq('id', product.farmer_id)
                 .single();
               
-              // If we have location data, calculate distance
               if (farmerProfile?.address) {
                 // Mock coordinates extraction - in a real app, you'd need to geocode the address
                 // or store lat/lng directly in the database
                 const mockLat = parseFloat(`18.${product.id.charCodeAt(0) % 10}${product.id.charCodeAt(1) % 10}`);
                 const mockLng = parseFloat(`73.${product.id.charCodeAt(2) % 10}${product.id.charCodeAt(3) % 10}`);
                 
-                const distance = calculateDistance(
+                distance = calculateDistance(
                   currentLocation.latitude,
                   currentLocation.longitude,
                   mockLat,
                   mockLng
                 );
-                
-                return { ...product, distance };
               }
-              
-              return product;
-            }));
+            }
             
-            setProducts(productsWithDistance);
-          } else {
-            setProducts(productsWithMetadata);
-          }
+            return { 
+              ...product,
+              farmer_name: farmerData?.name || 'Unknown Farmer',
+              distance,
+              highest_bid: highestBid || product.price,
+              bids_count: bidsCount
+            };
+          }));
+          
+          setProducts(productsWithMetadata);
         }
       } catch (error) {
         console.error('Error fetching products:', error);
@@ -128,7 +118,26 @@ const BrowseProducts = () => {
       })));
     }, 1000);
 
-    return () => clearInterval(interval);
+    // Set up real-time subscription for product changes
+    const channel = supabase
+      .channel('public:products')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'products'
+        }, 
+        () => {
+          // Refresh products when there's a change
+          fetchProducts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [currentLocation, calculateDistance]);
 
   // Filter products based on search, category, price, etc.
@@ -172,7 +181,7 @@ const BrowseProducts = () => {
   }, [products, filters, currentLocation]);
 
   // Get time remaining until auction ends
-  const getTimeRemaining = (endTimeStr: string | null): string => {
+  const getTimeRemaining = (endTimeStr: string | null | undefined): string => {
     if (!endTimeStr) return "No deadline";
     
     const endTime = new Date(endTimeStr);
@@ -180,7 +189,21 @@ const BrowseProducts = () => {
     
     if (now >= endTime) return "Auction ended";
     
-    return formatDistance(endTime, now, { addSuffix: false });
+    const timeDiff = endTime.getTime() - now.getTime();
+    
+    // Format countdown
+    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+    
+    let timeString = '';
+    if (days > 0) timeString += `${days}d `;
+    if (hours > 0 || days > 0) timeString += `${hours}h `;
+    if (minutes > 0 || hours > 0 || days > 0) timeString += `${minutes}m `;
+    timeString += `${seconds}s`;
+    
+    return timeString;
   };
 
   // Handle filter changes
@@ -314,8 +337,10 @@ const BrowseProducts = () => {
               }
             }
             
+            const timeLeft = product.timeLeft || getTimeRemaining(product.bid_end);
+            
             return (
-              <Card key={product.id}>
+              <Card key={product.id} className="overflow-hidden hover:shadow-md transition-all">
                 <div className="aspect-w-16 aspect-h-9 relative">
                   <img 
                     src={product.image_url || '/placeholder.svg'} 
@@ -351,7 +376,7 @@ const BrowseProducts = () => {
                       <p className="text-sm text-gray-500">Highest Bid</p>
                       <p className="text-lg font-medium text-green-600 flex items-center justify-end">
                         <IndianRupee className="h-4 w-4 mr-0.5" />
-                        {product.highest_bid || product.price}/{product.unit}
+                        {product.highest_bid}/{product.unit}
                       </p>
                     </div>
                   </div>
@@ -359,7 +384,7 @@ const BrowseProducts = () => {
                     <div className="flex items-center">
                       <Clock className="h-4 w-4 mr-1 text-gray-500" />
                       <p className="text-sm text-gray-500">
-                        {product.timeLeft || getTimeRemaining(product.bid_end)}
+                        {timeLeft}
                       </p>
                     </div>
                     <Link to={`/buyer/product/${product.id}`}>

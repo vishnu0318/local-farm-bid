@@ -16,6 +16,8 @@ export interface Product {
   highest_bid?: number;
   highest_bidder_id?: string;
   bids_count?: number;
+  timeLeft?: string;
+  available?: boolean;
 }
 
 export interface Bid {
@@ -36,4 +38,5 @@ export interface FarmerProfile {
   address?: string;
   land_size?: string;
   email?: string;
+  company_name?: string;
 }

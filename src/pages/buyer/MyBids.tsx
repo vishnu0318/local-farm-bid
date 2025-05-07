@@ -43,10 +43,7 @@ const MyBids = () => {
             // Get product information for this bid
             const { data: productData, error: productError } = await supabase
               .from('products')
-              .select(`
-                *,
-                profiles:farmer_id (name)
-              `)
+              .select('*')
               .eq('id', bid.product_id)
               .single();
             
@@ -55,6 +52,13 @@ const MyBids = () => {
               return null;
             }
             
+            // Get farmer information separately
+            const { data: farmerData } = await supabase
+              .from('profiles')
+              .select('name')
+              .eq('id', productData.farmer_id)
+              .single();
+              
             // Get highest bid for this product
             const { data: highestBidData, error: highestBidError } = await supabase
               .from('bids')
@@ -68,7 +72,7 @@ const MyBids = () => {
               ...bid,
               product: {
                 ...productData,
-                farmer_name: productData.profiles?.name || 'Unknown Farmer',
+                farmer_name: farmerData?.name || 'Unknown Farmer',
                 highest_bid: highestBidData?.amount || bid.amount,
                 highest_bidder_id: highestBidData?.bidder_id || null
               }
@@ -285,7 +289,7 @@ const MyBids = () => {
                             </Link>
                           )}
                           {bidStatus.status === 'won' && (
-                            <Link to={`/buyer/product/${bid.product_id}`}>
+                            <Link to={`/buyer/payment-details?product=${bid.product_id}`}>
                               <Button>
                                 Complete Purchase
                               </Button>

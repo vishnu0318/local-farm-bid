@@ -1,138 +1,175 @@
 
-import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Clock, IndianRupee, Loader2, MapPin, User, CalendarCheck } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import BidForm from '@/components/buyer/BidForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
-import { toast } from "sonner";
-import { format, formatDistance } from 'date-fns';
-import BidForm from '@/components/buyer/BidForm';
-import { Bid, Product, FarmerProfile } from '@/types/marketplace';
+import { toast } from 'sonner';
+import { Loader2, MapPin, IndianRupee, Timer } from 'lucide-react';
+import { formatDistance, format, isAfter, isBefore } from 'date-fns';
+import { Product, FarmerProfile, Bid } from '@/types/marketplace';
+import { getProductBids } from '@/services/bidService';
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [product, setProduct] = useState<Product | null>(null);
-  const [farmer, setFarmer] = useState<FarmerProfile | null>(null);
   const [bids, setBids] = useState<Bid[]>([]);
+  const [farmer, setFarmer] = useState<FarmerProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('details');
   const [highestBid, setHighestBid] = useState<number>(0);
-  const [isWinner, setIsWinner] = useState(false);
-  
-  // Function to check if auction is ended
-  const isAuctionEnded = () => {
-    if (!product || !product.bid_end) return false;
-    
-    const now = new Date();
-    const endTime = new Date(product.bid_end);
-    return now > endTime;
-  };
-  
-  // Function to fetch product and related data
-  const fetchProductData = async () => {
-    if (!id) return;
-    
-    setIsLoading(true);
-    
-    try {
-      // Get product data
-      const { data: productData, error: productError } = await supabase
-        .from('products')
-        .select(`
-          *,
-          profiles:farmer_id (*)
-        `)
-        .eq('id', id)
-        .single();
+  const [isUserHighestBidder, setIsUserHighestBidder] = useState(false);
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  const [auctionEnded, setAuctionEnded] = useState(false);
+
+  // Fetch product details and bids
+  useEffect(() => {
+    const fetchProductDetails = async () => {
+      if (!id) return;
       
-      if (productError) throw productError;
+      setIsLoading(true);
       
-      if (productData) {
-        const formattedProduct = {
-          ...productData,
-          farmer_name: productData.profiles?.name || 'Unknown Farmer',
-        };
-        
-        setProduct(formattedProduct);
-        
-        // Only expose farmer details to the auction winner after auction ends
-        const auctionEnded = productData.bid_end && new Date() > new Date(productData.bid_end);
-        
-        // Get bids for this product
-        const { data: bidsData, error: bidsError } = await supabase
-          .from('bids')
+      try {
+        // Fetch product
+        const { data: productData, error: productError } = await supabase
+          .from('products')
           .select('*')
-          .eq('product_id', id)
-          .order('amount', { ascending: false });
+          .eq('id', id)
+          .single();
         
-        if (bidsError) throw bidsError;
+        if (productError) throw productError;
         
-        if (bidsData && bidsData.length > 0) {
-          setBids(bidsData);
-          setHighestBid(bidsData[0].amount);
-          
-          // Check if current user is the highest bidder
-          if (user && bidsData[0].bidder_id === user.id) {
-            setIsWinner(true);
+        setProduct(productData);
+        
+        // Fetch farmer details separately
+        if (productData?.farmer_id) {
+          const { data: farmerData, error: farmerError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', productData.farmer_id)
+            .single();
             
-            // If auction ended and user is winner, get farmer details
-            if (auctionEnded) {
-              setFarmer(productData.profiles as FarmerProfile);
-            }
+          if (!farmerError && farmerData) {
+            setFarmer(farmerData);
+          }
+        }
+        
+        // Check auction status
+        if (productData?.bid_end) {
+          const endTime = new Date(productData.bid_end);
+          const now = new Date();
+          setAuctionEnded(isAfter(now, endTime));
+          updateTimeRemaining(endTime);
+        }
+        
+        // Fetch bids
+        const productBids = await getProductBids(id);
+        setBids(productBids);
+        
+        // Set highest bid and check if user is highest bidder
+        if (productBids.length > 0) {
+          const maxBid = productBids[0]; // Assuming bids are sorted by amount desc
+          setHighestBid(maxBid.amount);
+          
+          if (user && maxBid.bidder_id === user.id) {
+            setIsUserHighestBidder(true);
           }
         } else {
-          // No bids yet, set starting price
-          setHighestBid(productData.price);
+          setHighestBid(productData?.price || 0);
         }
+      } catch (error) {
+        console.error('Error fetching product details:', error);
+        toast.error('Failed to load product details');
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error('Error fetching product:', error);
-      toast.error('Failed to load product details');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  // Fetch product data on mount and ID change
-  useEffect(() => {
-    fetchProductData();
+    };
     
-    // Set up interval to refresh remaining time
-    const interval = setInterval(() => {
+    fetchProductDetails();
+    
+    // Set up timer to update remaining time
+    const timer = setInterval(() => {
       if (product?.bid_end) {
-        // Force re-render to update time remaining
-        setProduct(prevProduct => prevProduct ? {...prevProduct} : null);
+        const endTime = new Date(product.bid_end);
+        updateTimeRemaining(endTime);
+        
+        const now = new Date();
+        if (isAfter(now, endTime)) {
+          setAuctionEnded(true);
+          clearInterval(timer);
+        }
       }
     }, 1000);
     
-    return () => clearInterval(interval);
-  }, [id]);
+    return () => clearInterval(timer);
+  }, [id, user]);
   
-  // Calculate time remaining
-  const getTimeRemaining = () => {
-    if (!product || !product.bid_end) return "No deadline";
+  // Function to handle successful bid placement
+  const handleBidSuccess = async () => {
+    if (!id) return;
     
-    const endTime = new Date(product.bid_end);
+    try {
+      // Refresh bids
+      const refreshedBids = await getProductBids(id);
+      setBids(refreshedBids);
+      
+      // Update highest bid status
+      if (refreshedBids.length > 0) {
+        const maxBid = refreshedBids[0]; // Assuming bids are sorted by amount desc
+        setHighestBid(maxBid.amount);
+        
+        if (user && maxBid.bidder_id === user.id) {
+          setIsUserHighestBidder(true);
+          toast.success('You are now the highest bidder!');
+        } else {
+          setIsUserHighestBidder(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing bids:', error);
+    }
+  };
+  
+  // Update time remaining in a readable format
+  const updateTimeRemaining = (endTime: Date) => {
     const now = new Date();
     
-    if (now >= endTime) return "Auction ended";
-    
-    // Calculate days, hours, minutes, seconds
-    const diffMs = endTime.getTime() - now.getTime();
-    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
-    
-    if (days > 0) {
-      return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-    } else {
-      return `${hours}h ${minutes}m ${seconds}s`;
+    if (isAfter(now, endTime)) {
+      setTimeRemaining('Auction ended');
+      setAuctionEnded(true);
+      return;
     }
+    
+    const timeDiff = endTime.getTime() - now.getTime();
+    
+    // Format countdown
+    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+    
+    let timeString = '';
+    if (days > 0) timeString += `${days}d `;
+    if (hours > 0 || days > 0) timeString += `${hours}h `;
+    if (minutes > 0 || hours > 0 || days > 0) timeString += `${minutes}m `;
+    timeString += `${seconds}s`;
+    
+    setTimeRemaining(timeString);
+  };
+  
+  // Check if bidding has started
+  const hasBiddingStarted = () => {
+    if (!product?.bid_start) return true; // If no start time, bidding is always open
+    
+    const startTime = new Date(product.bid_start);
+    const now = new Date();
+    return isAfter(now, startTime);
   };
   
   if (isLoading) {
@@ -146,155 +183,187 @@ const ProductDetail = () => {
   
   if (!product) {
     return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-semibold mb-2">Product Not Found</h2>
-        <p className="mb-6 text-gray-500">
+      <div className="text-center py-16">
+        <h2 className="text-2xl font-bold text-red-600 mb-4">Product Not Found</h2>
+        <p className="text-gray-600 mb-6">
           The product you're looking for doesn't exist or has been removed.
         </p>
-        <Link to="/buyer/browse-products">
-          <Button>Browse Products</Button>
-        </Link>
+        <Button variant="outline" onClick={() => window.history.back()}>
+          Go Back
+        </Button>
       </div>
     );
   }
   
-  const auctionEnded = isAuctionEnded();
-  const timeRemaining = getTimeRemaining();
-  
   return (
-    <div>
-      <div className="mb-4">
-        <Link to="/buyer/browse-products">
-          <Button variant="outline" size="sm">
-            &larr; Back to Browse
-          </Button>
-        </Link>
-      </div>
-      
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Product Image and Details */}
+    <div className="max-w-7xl mx-auto">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Product image and details */}
         <div className="md:col-span-2">
-          <Card>
-            <div className="relative">
-              <img 
-                src={product.image_url || '/placeholder.svg'} 
-                alt={product.name} 
-                className="w-full h-[300px] object-cover rounded-t-lg"
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="relative h-[300px] md:h-[400px]">
+              <img
+                src={product.image_url || '/placeholder.svg'}
+                alt={product.name}
+                className="w-full h-full object-cover"
               />
-              <Badge className="absolute top-4 right-4">
-                {product.category.charAt(0).toUpperCase() + product.category.slice(1)}
-              </Badge>
-            </div>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-2xl">{product.name}</CardTitle>
-                  <CardDescription className="flex items-center mt-1">
-                    <MapPin className="h-4 w-4 mr-1" /> {/* Approximated location for privacy */}
-                    {farmer && isWinner && auctionEnded ? farmer.address : 'Location details available after winning bid'}
-                  </CardDescription>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Base Price</p>
-                  <p className="text-xl font-medium flex items-center">
-                    <IndianRupee className="h-5 w-5 mr-0.5" />
-                    {product.price}/{product.unit}
-                  </p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm text-gray-500">Quantity Available</p>
-                  <p className="font-medium">{product.quantity} {product.unit}</p>
-                </div>
-                <div className="flex items-center bg-amber-50 px-3 py-1 rounded-full">
-                  <Clock className="h-4 w-4 text-amber-500 mr-1" />
-                  <p className={`text-sm ${auctionEnded ? 'text-red-500' : 'text-amber-500'}`}>
-                    {timeRemaining}
-                  </p>
-                </div>
-              </div>
-              
-              <div className="mb-6">
-                <h3 className="font-semibold mb-2">Product Description</h3>
-                <p className="text-gray-700">
-                  {product.description || 'No description provided.'}
-                </p>
-              </div>
-              
-              <div className="flex flex-wrap gap-2 mb-4">
-                <div className="bg-gray-100 px-3 py-1 rounded-full flex items-center">
-                  <CalendarCheck className="h-4 w-4 mr-1" />
-                  <p className="text-sm">{product.bid_end ? `Auction ends: ${new Date(product.bid_end).toLocaleString()}` : 'No auction deadline'}</p>
-                </div>
+              <div className="absolute top-4 right-4 flex flex-col gap-2">
+                <Badge className="text-sm">{product.category}</Badge>
                 
-                <div className="bg-gray-100 px-3 py-1 rounded-full flex items-center">
-                  <User className="h-4 w-4 mr-1" />
-                  <p className="text-sm">
-                    {isWinner && auctionEnded 
-                      ? `Farmer: ${product.farmer_name}` 
-                      : 'Farmer details available after winning'}
-                  </p>
-                </div>
+                {product.bid_start && product.bid_end && (
+                  <Badge variant={auctionEnded ? "destructive" : hasBiddingStarted() ? "default" : "outline"} className="text-sm">
+                    {auctionEnded ? "Auction Ended" : hasBiddingStarted() ? "Auction Active" : "Auction Starting Soon"}
+                  </Badge>
+                )}
               </div>
               
-              {isWinner && auctionEnded && farmer && (
-                <div className="mt-6 p-4 border rounded-md bg-green-50">
-                  <h3 className="font-semibold text-green-700 mb-2">Congratulations! You've Won This Auction</h3>
-                  <div className="space-y-2">
-                    <p><strong>Farmer:</strong> {farmer.name}</p>
-                    {farmer.phone && <p><strong>Contact:</strong> {farmer.phone}</p>}
-                    {farmer.address && <p><strong>Address:</strong> {farmer.address}</p>}
-                    <p className="text-sm text-gray-600">Please contact the farmer to arrange delivery and payment.</p>
+              {product.bid_start && product.bid_end && !auctionEnded && (
+                <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-3 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Timer className="mr-2 h-5 w-5" />
+                    {hasBiddingStarted() ? (
+                      <span>Ends in: <strong>{timeRemaining}</strong></span>
+                    ) : (
+                      <span>Starts in: <strong>{formatDistance(new Date(product.bid_start), new Date(), { addSuffix: false })}</strong></span>
+                    )}
                   </div>
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+            
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h1 className="text-3xl font-bold">{product.name}</h1>
+                  <p className="text-gray-600">
+                    {product.quantity} {product.unit} available
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">Base Price</p>
+                  <p className="text-2xl font-bold flex items-center justify-end">
+                    <IndianRupee className="h-5 w-5 mr-1" />
+                    {product.price}
+                    <span className="text-sm font-normal ml-1">/{product.unit}</span>
+                  </p>
+                </div>
+              </div>
+
+              <Tabs defaultValue="details" onValueChange={setActiveTab} className="mt-6">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="bids">Bids ({bids.length})</TabsTrigger>
+                  <TabsTrigger value="shipping">Shipping</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="details" className="mt-4">
+                  <div className="prose max-w-none">
+                    <p className="text-gray-800">{product.description || "No description available."}</p>
+                    
+                    <div className="mt-4">
+                      <h3 className="font-medium text-lg">Product Information</h3>
+                      <div className="grid grid-cols-2 gap-4 mt-2">
+                        <div>
+                          <p className="text-sm text-gray-500">Category</p>
+                          <p>{product.category}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-gray-500">Quantity Available</p>
+                          <p>{product.quantity} {product.unit}</p>
+                        </div>
+                        {auctionEnded && isUserHighestBidder && farmer && (
+                          <>
+                            <div>
+                              <p className="text-sm text-gray-500">Farmer Name</p>
+                              <p>{farmer.name || "Unknown"}</p>
+                            </div>
+                            {farmer.phone && (
+                              <div>
+                                <p className="text-sm text-gray-500">Contact</p>
+                                <p>{farmer.phone}</p>
+                              </div>
+                            )}
+                            {farmer.address && (
+                              <div className="col-span-2">
+                                <p className="text-sm text-gray-500">Location</p>
+                                <p className="flex items-center">
+                                  <MapPin className="h-4 w-4 mr-1" />
+                                  {farmer.address}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="bids" className="mt-4">
+                  {bids.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      {auctionEnded ? "No bids were placed for this product." : "No bids yet. Be the first to bid!"}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex justify-between font-medium text-sm text-gray-500 px-2 py-1">
+                        <span>Bidder</span>
+                        <span>Amount</span>
+                      </div>
+                      <Separator />
+                      {bids.map((bid, index) => (
+                        <div key={bid.id} className="flex justify-between items-center">
+                          <div className="flex items-center">
+                            <span className={`font-medium ${index === 0 ? 'text-green-600' : ''}`}>
+                              {bid.bidder_id === user?.id ? 'You' : bid.bidder_name}
+                            </span>
+                            {index === 0 && <Badge className="ml-2 bg-green-600">Highest</Badge>}
+                          </div>
+                          <span className={`font-medium flex items-center ${index === 0 ? 'text-green-600' : ''}`}>
+                            <IndianRupee className="h-4 w-4 mr-0.5" />
+                            {bid.amount}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+                
+                <TabsContent value="shipping" className="mt-4">
+                  <div className="prose max-w-none">
+                    <p>Shipping information will be provided after winning the auction.</p>
+                    <p className="mt-2">Available payment methods:</p>
+                    <ul className="list-disc ml-5 mt-2">
+                      <li>Cash on Delivery</li>
+                      <li>UPI Payment</li>
+                      <li>Credit/Debit Card</li>
+                    </ul>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
         </div>
         
-        {/* Bid Section */}
+        {/* Bidding section */}
         <div>
           <BidForm 
             product={product} 
-            onBidSuccess={fetchProductData}
+            onBidSuccess={handleBidSuccess} 
             currentHighestBid={highestBid}
-            isWinner={isWinner && auctionEnded}
+            isWinner={auctionEnded && isUserHighestBidder}
           />
           
+          {/* Show similar products */}
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle>Bid History</CardTitle>
+              <CardTitle>Similar Products</CardTitle>
+              <CardDescription>You might also be interested in</CardDescription>
             </CardHeader>
             <CardContent>
-              {bids.length === 0 ? (
-                <p className="text-center text-gray-500 py-4">No bids placed yet. Be the first!</p>
-              ) : (
-                <div className="space-y-3">
-                  {bids.slice(0, 5).map((bid) => (
-                    <div key={bid.id} className="flex justify-between border-b pb-2">
-                      <div>
-                        <p className="font-medium">{bid.bidder_id === user?.id ? "You" : bid.bidder_name}</p>
-                        <p className="text-xs text-gray-500">{format(new Date(bid.created_at), 'MMM d, yyyy, hh:mm a')}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium flex items-center">
-                          <IndianRupee className="h-3 w-3 mr-0.5" />
-                          {bid.amount}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {bids.length > 5 && (
-                    <p className="text-center text-sm text-gray-500">
-                      +{bids.length - 5} more bids
-                    </p>
-                  )}
-                </div>
-              )}
+              <p className="text-center py-4 text-gray-500">
+                No similar products found
+              </p>
             </CardContent>
           </Card>
         </div>

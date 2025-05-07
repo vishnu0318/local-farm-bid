@@ -101,7 +101,7 @@ export const getUserBids = async (userId: string): Promise<Bid[]> => {
       .from('bids')
       .select(`
         *,
-        products:product_id (*)
+        product:product_id (*)
       `)
       .eq('bidder_id', userId)
       .order('created_at', { ascending: false });
@@ -111,7 +111,13 @@ export const getUserBids = async (userId: string): Promise<Bid[]> => {
       return [];
     }
     
-    return data as unknown as Bid[];
+    // Process the bids to match our expected format
+    const processedBids = data.map((bid: any) => ({
+      ...bid,
+      product: bid.product
+    }));
+    
+    return processedBids as Bid[];
   } catch (error) {
     console.error('Error fetching user bids:', error);
     return [];
@@ -153,5 +159,67 @@ export const getHighestBid = async (productId: string): Promise<number> => {
   } catch (error) {
     console.error('Error fetching highest bid:', error);
     return 0;
+  }
+};
+
+// Subscribe to bid changes for a specific product
+export const subscribeToBidChanges = (
+  productId: string, 
+  callback: () => void
+) => {
+  const channel = supabase
+    .channel(`product-${productId}`)
+    .on('postgres_changes', 
+      { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'bids',
+        filter: `product_id=eq.${productId}`
+      }, 
+      callback
+    )
+    .subscribe();
+    
+  return channel;
+};
+
+// Get all bids for a user with product details
+export const getUserBidsWithProducts = async (userId: string): Promise<Bid[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('bids')
+      .select('*')
+      .eq('bidder_id', userId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching user bids:', error);
+      return [];
+    }
+    
+    // Get product details for each bid
+    const enrichedBids = await Promise.all(data.map(async (bid) => {
+      const { data: productData, error: productError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('id', bid.product_id)
+        .single();
+      
+      if (productError) {
+        console.error('Error fetching product details:', productError);
+        return null;
+      }
+      
+      return {
+        ...bid,
+        product: productData
+      };
+    }));
+    
+    // Filter out null values
+    return enrichedBids.filter(Boolean) as Bid[];
+  } catch (error) {
+    console.error('Error fetching user bids with products:', error);
+    return [];
   }
 };
