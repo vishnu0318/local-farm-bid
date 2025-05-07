@@ -10,25 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from "sonner";
 import { format, formatDistance } from 'date-fns';
-
-interface Bid {
-  id: string;
-  product_id: string;
-  bidder_id: string;
-  bidder_name: string;
-  amount: number;
-  created_at: string;
-  product: {
-    id: string;
-    name: string;
-    farmer_id: string;
-    farmer_name?: string;
-    image_url: string | null;
-    bid_end: string | null;
-    highest_bid?: number;
-    highest_bidder_id?: string;
-  };
-}
+import { Bid, Product } from '@/types/marketplace';
 
 const MyBids = () => {
   const { user } = useAuth();
@@ -46,38 +28,35 @@ const MyBids = () => {
       setIsLoading(true);
       
       try {
-        // Fetch all of the user's bids with product information
-        const { data, error } = await supabase
+        // First get all user bids
+        const { data: bidsData, error: bidsError } = await supabase
           .from('bids')
-          .select(`
-            *,
-            product:product_id (
-              id,
-              name,
-              farmer_id,
-              image_url,
-              bid_end,
-              profiles:farmer_id(name)
-            )
-          `)
+          .select('*')
           .eq('bidder_id', user.id)
           .order('created_at', { ascending: false });
         
-        if (error) throw error;
+        if (bidsError) throw bidsError;
         
-        if (data) {
-          // Process the bid data to include farmer name and status
-          const processedBids = await Promise.all(data.map(async (bid) => {
-            const formattedBid = {
-              ...bid,
-              product: {
-                ...bid.product,
-                farmer_name: bid.product.profiles?.name || 'Unknown Farmer'
-              }
-            };
+        if (bidsData) {
+          // Get product details for each bid
+          const enrichedBids = await Promise.all(bidsData.map(async (bid) => {
+            // Get product information for this bid
+            const { data: productData, error: productError } = await supabase
+              .from('products')
+              .select(`
+                *,
+                profiles:farmer_id (name)
+              `)
+              .eq('id', bid.product_id)
+              .single();
             
-            // Get highest bid for each product to determine if user is winning
-            const { data: highestBid } = await supabase
+            if (productError) {
+              console.error('Error fetching product:', productError);
+              return null;
+            }
+            
+            // Get highest bid for this product
+            const { data: highestBidData, error: highestBidError } = await supabase
               .from('bids')
               .select('bidder_id, amount')
               .eq('product_id', bid.product_id)
@@ -85,15 +64,21 @@ const MyBids = () => {
               .limit(1)
               .single();
             
-            if (highestBid) {
-              formattedBid.product.highest_bid = highestBid.amount;
-              formattedBid.product.highest_bidder_id = highestBid.bidder_id;
-            }
+            const enrichedBid: Bid = {
+              ...bid,
+              product: {
+                ...productData,
+                farmer_name: productData.profiles?.name || 'Unknown Farmer',
+                highest_bid: highestBidData?.amount || bid.amount,
+                highest_bidder_id: highestBidData?.bidder_id || null
+              }
+            };
             
-            return formattedBid;
+            return enrichedBid;
           }));
           
-          setBids(processedBids);
+          // Filter out null values (failed fetches)
+          setBids(enrichedBids.filter(Boolean) as Bid[]);
         }
       } catch (error) {
         console.error('Error fetching bids:', error);
@@ -131,19 +116,19 @@ const MyBids = () => {
   // Determine bid status
   const getBidStatus = (bid: Bid) => {
     const now = new Date();
-    const bidEnd = bid.product.bid_end ? new Date(bid.product.bid_end) : null;
+    const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
     const isEnded = bidEnd && now > bidEnd;
     
     if (isEnded) {
       // Auction has ended
-      if (bid.product.highest_bidder_id === user.id) {
+      if (bid.product?.highest_bidder_id === user.id) {
         return { status: 'won', label: 'Won' };
       } else {
         return { status: 'lost', label: 'Lost' };
       }
     } else {
       // Auction is still active
-      if (bid.product.highest_bidder_id === user.id) {
+      if (bid.product?.highest_bidder_id === user.id) {
         return { status: 'winning', label: 'Winning' };
       } else {
         return { status: 'outbid', label: 'Outbid' };
@@ -152,7 +137,7 @@ const MyBids = () => {
   };
   
   // Calculate time remaining
-  const getTimeRemaining = (endTimeStr: string | null) => {
+  const getTimeRemaining = (endTimeStr: string | null | undefined) => {
     if (!endTimeStr) return "No deadline";
     
     const endTime = new Date(endTimeStr);
@@ -167,13 +152,13 @@ const MyBids = () => {
   const getFilteredBids = () => {
     const activeBids = bids.filter(bid => {
       const now = new Date();
-      const bidEnd = bid.product.bid_end ? new Date(bid.product.bid_end) : null;
+      const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
       return !bidEnd || now <= bidEnd;
     });
     
     const completedBids = bids.filter(bid => {
       const now = new Date();
-      const bidEnd = bid.product.bid_end ? new Date(bid.product.bid_end) : null;
+      const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
       return bidEnd && now > bidEnd;
     });
     
@@ -232,7 +217,7 @@ const MyBids = () => {
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredBids.map((bid) => {
                   const bidStatus = getBidStatus(bid);
-                  const timeLeft = getTimeRemaining(bid.product.bid_end);
+                  const timeLeft = getTimeRemaining(bid.product?.bid_end);
                   const isActive = activeTab === 'active';
                   const isWon = activeTab === 'won';
                   
@@ -240,8 +225,8 @@ const MyBids = () => {
                     <Card key={bid.id}>
                       <div className="aspect-w-16 aspect-h-9 relative">
                         <img 
-                          src={bid.product.image_url || '/placeholder.svg'} 
-                          alt={bid.product.name} 
+                          src={bid.product?.image_url || '/placeholder.svg'} 
+                          alt={bid.product?.name} 
                           className="object-cover w-full h-48 rounded-t-lg"
                         />
                         <Badge 
@@ -256,9 +241,9 @@ const MyBids = () => {
                         </Badge>
                       </div>
                       <CardHeader>
-                        <CardTitle>{bid.product.name}</CardTitle>
+                        <CardTitle>{bid.product?.name}</CardTitle>
                         <CardDescription>
-                          {isWon ? `By ${bid.product.farmer_name}` : 
+                          {isWon ? `By ${bid.product?.farmer_name}` : 
                            isActive ? `${timeLeft}` : 
                            `Bid placed on ${format(new Date(bid.created_at), 'MMM d, yyyy')}`}
                         </CardDescription>
@@ -280,7 +265,7 @@ const MyBids = () => {
                                 'text-green-600' : 'text-red-500'
                               }`}>
                                 <IndianRupee className="h-4 w-4 mr-0.5" />
-                                {bid.product.highest_bid || bid.amount}
+                                {bid.product?.highest_bid || bid.amount}
                               </p>
                             </div>
                           )}

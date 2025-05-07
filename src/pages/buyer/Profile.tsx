@@ -50,7 +50,7 @@ const BuyerProfile = () => {
         if (data) {
           setProfileData({
             name: data.name || '',
-            email: data.email || '',
+            email: user.email || '', // Get email from auth user object
             phone: data.phone || '',
             address: data.address || '',
             pinCode: data.address?.match(/(\d{6})/) ? data.address.match(/(\d{6})/)[1] : '',

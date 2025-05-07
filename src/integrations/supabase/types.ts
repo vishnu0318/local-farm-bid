@@ -48,6 +48,41 @@ export type Database = {
         }
         Relationships: []
       }
+      bids: {
+        Row: {
+          amount: number
+          bidder_id: string
+          bidder_name: string
+          created_at: string
+          id: string
+          product_id: string
+        }
+        Insert: {
+          amount: number
+          bidder_id: string
+          bidder_name: string
+          created_at?: string
+          id?: string
+          product_id: string
+        }
+        Update: {
+          amount?: number
+          bidder_id?: string
+          bidder_name?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bids_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           available: boolean | null
