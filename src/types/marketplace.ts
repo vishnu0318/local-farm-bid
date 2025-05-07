@@ -18,6 +18,7 @@ export interface Product {
   bids_count?: number;
   timeLeft?: string;
   available?: boolean;
+  paid?: boolean; // To track payment status
 }
 
 export interface Bid {
@@ -39,4 +40,21 @@ export interface FarmerProfile {
   land_size?: string;
   email?: string;
   company_name?: string;
+}
+
+export interface Order {
+  id: string;
+  product_id: string;
+  buyer_id: string;
+  amount: number;
+  payment_method: 'cod' | 'upi' | 'card';
+  payment_status: 'pending' | 'completed' | 'failed';
+  delivery_address?: {
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+  };
+  created_at: string;
 }

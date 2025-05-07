@@ -5,11 +5,12 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { IndianRupee, Loader2 } from "lucide-react";
+import { IndianRupee, Loader2, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/context/AuthContext";
 import { Product } from "@/types/marketplace";
 import { Link } from "react-router-dom";
+import { placeBid } from "@/services/bidService";
 
 interface BidFormProps {
   product: Product;
@@ -67,17 +68,16 @@ export default function BidForm({ product, onBidSuccess, currentHighestBid, isWi
     setIsSubmitting(true);
     
     try {
-      // Insert new bid into Supabase
-      const { error } = await supabase
-        .from('bids')
-        .insert({
-          product_id: product.id,
-          bidder_id: user.id,
-          bidder_name: user.user_metadata?.name || user.email?.split('@')[0] || 'Anonymous',
-          amount: bidAmount
-        });
+      const result = await placeBid(
+        product.id,
+        user.id,
+        user.user_metadata?.name || user.email?.split('@')[0] || 'Anonymous',
+        bidAmount
+      );
       
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || "Failed to place bid");
+      }
       
       toast.success("Your bid has been placed successfully!");
       setBidAmount(bidAmount + 5);
@@ -123,39 +123,42 @@ export default function BidForm({ product, onBidSuccess, currentHighestBid, isWi
   // If bidding has ended and user is the winner
   if (isBiddingEnded() && isWinner) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-green-600">You Won This Auction!</CardTitle>
+      <Card className="border-green-500 border-2">
+        <CardHeader className="bg-green-50 rounded-t-lg">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="h-5 w-5 text-green-600" />
+            <CardTitle className="text-green-700">You Won This Auction!</CardTitle>
+          </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-gray-600 mb-4">
-            Congratulations! You've won this auction with the highest bid.
+        <CardContent className="pt-6">
+          <p className="text-gray-700 mb-4">
+            Congratulations! Your bid was the highest. Complete your purchase to claim this product.
           </p>
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-sm text-gray-500">Your Winning Bid:</span>
-            <span className="font-medium text-green-600 flex items-center">
-              <IndianRupee className="h-4 w-4 mr-0.5" />
+          <div className="flex items-center justify-between mb-6">
+            <span className="text-sm font-medium">Your Winning Bid:</span>
+            <span className="font-bold text-green-600 flex items-center text-xl">
+              <IndianRupee className="h-5 w-5 mr-0.5" />
               {currentHighestBid}
             </span>
           </div>
-          <h3 className="font-medium mb-2">Choose Payment Method</h3>
-          <div className="space-y-2">
-            <div className="flex items-center space-x-2">
-              <input type="radio" id="cod" name="payment" value="cod" />
-              <label htmlFor="cod">Cash on Delivery</label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <input type="radio" id="upi" name="payment" value="upi" />
-              <label htmlFor="upi">UPI</label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <input type="radio" id="card" name="payment" value="card" />
-              <label htmlFor="card">Credit/Debit Card</label>
+          <div className="p-4 bg-gray-50 rounded-lg mb-4">
+            <h3 className="font-medium mb-2">Product Details</h3>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <span className="text-gray-600">Product:</span>
+              <span className="font-medium">{product.name}</span>
+              
+              <span className="text-gray-600">Quantity:</span>
+              <span className="font-medium">{product.quantity} {product.unit}</span>
+              
+              <span className="text-gray-600">Seller:</span>
+              <span className="font-medium">{product.farmer_name}</span>
             </div>
           </div>
         </CardContent>
         <CardFooter>
-          <Button className="w-full">Complete Purchase</Button>
+          <Link to={`/buyer/payment-details?product=${product.id}`} className="w-full">
+            <Button className="w-full">Complete Purchase</Button>
+          </Link>
         </CardFooter>
       </Card>
     );

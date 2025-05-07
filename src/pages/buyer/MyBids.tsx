@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,6 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { toast } from "sonner";
 import { format, formatDistance } from 'date-fns';
 import { Bid, Product } from '@/types/marketplace';
+import { mockProducts } from '@/services/mockData';
 
 const MyBids = () => {
   const { user } = useAuth();
@@ -28,66 +29,36 @@ const MyBids = () => {
       setIsLoading(true);
       
       try {
-        // First get all user bids
-        const { data: bidsData, error: bidsError } = await supabase
-          .from('bids')
-          .select('*')
-          .eq('bidder_id', user.id)
-          .order('created_at', { ascending: false });
-        
-        if (bidsError) throw bidsError;
-        
-        if (bidsData) {
-          // Get product details for each bid
-          const enrichedBids = await Promise.all(bidsData.map(async (bid) => {
-            // Get product information for this bid
-            const { data: productData, error: productError } = await supabase
-              .from('products')
-              .select('*')
-              .eq('id', bid.product_id)
-              .single();
+        // Create mock bids data based on the mock products
+        // In a real implementation, we would fetch from Supabase
+        const mockBids: Bid[] = mockProducts
+          .filter(product => Math.random() > 0.3) // Randomly select some products to have bids on
+          .map(product => {
+            // For products where user is highest bidder
+            const isHighestBidder = product.highest_bidder_id === "current_user_id" || product.highest_bidder_id === user.id;
+            const bidAmount = isHighestBidder ? product.highest_bid || product.price : Math.floor((product.highest_bid || product.price) * 0.9);
             
-            if (productError) {
-              console.error('Error fetching product:', productError);
-              return null;
-            }
-            
-            // Get farmer information separately
-            const { data: farmerData } = await supabase
-              .from('profiles')
-              .select('name')
-              .eq('id', productData.farmer_id)
-              .single();
-              
-            // Get highest bid for this product
-            const { data: highestBidData, error: highestBidError } = await supabase
-              .from('bids')
-              .select('bidder_id, amount')
-              .eq('product_id', bid.product_id)
-              .order('amount', { ascending: false })
-              .limit(1)
-              .single();
-            
-            const enrichedBid: Bid = {
-              ...bid,
+            return {
+              id: `bid-${product.id}`,
+              product_id: product.id,
+              bidder_id: user.id,
+              bidder_name: user.user_metadata?.name || user.email?.split('@')[0] || 'Anonymous',
+              amount: bidAmount,
+              created_at: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString(), // Random date in the last week
               product: {
-                ...productData,
-                farmer_name: farmerData?.name || 'Unknown Farmer',
-                highest_bid: highestBidData?.amount || bid.amount,
-                highest_bidder_id: highestBidData?.bidder_id || null
+                ...product,
+                highest_bidder_id: isHighestBidder ? user.id : `other-bidder-${Math.floor(Math.random() * 1000)}`
               }
             };
-            
-            return enrichedBid;
-          }));
-          
-          // Filter out null values (failed fetches)
-          setBids(enrichedBids.filter(Boolean) as Bid[]);
-        }
+          });
+        
+        setTimeout(() => {
+          setBids(mockBids);
+          setIsLoading(false);
+        }, 800); // Simulate loading delay
       } catch (error) {
         console.error('Error fetching bids:', error);
         toast.error('Failed to load your bids');
-      } finally {
         setIsLoading(false);
       }
     };
@@ -95,7 +66,31 @@ const MyBids = () => {
     fetchMyBids();
     
     // Set up interval to refresh bids status
-    const intervalId = setInterval(fetchMyBids, 60000); // Refresh every minute
+    const intervalId = setInterval(() => {
+      setBids(prevBids => prevBids.map(bid => {
+        if (!bid.product) return bid;
+        
+        const endTime = bid.product.bid_end ? new Date(bid.product.bid_end) : null;
+        const now = new Date();
+        
+        let timeLeft = "No deadline";
+        if (endTime) {
+          if (now >= endTime) {
+            timeLeft = "Ended";
+          } else {
+            timeLeft = formatDistance(endTime, now, { addSuffix: false }) + " left";
+          }
+        }
+        
+        return {
+          ...bid,
+          product: {
+            ...bid.product,
+            timeLeft
+          }
+        };
+      }));
+    }, 60000); // Refresh every minute
     
     return () => clearInterval(intervalId);
   }, [user]);
@@ -221,7 +216,7 @@ const MyBids = () => {
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredBids.map((bid) => {
                   const bidStatus = getBidStatus(bid);
-                  const timeLeft = getTimeRemaining(bid.product?.bid_end);
+                  const timeLeft = bid.product ? getTimeRemaining(bid.product.bid_end) : "Unknown";
                   const isActive = activeTab === 'active';
                   const isWon = activeTab === 'won';
                   
