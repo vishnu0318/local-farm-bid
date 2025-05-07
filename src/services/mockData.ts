@@ -1,146 +1,151 @@
 
-import { Product } from "@/types/marketplace";
+import { formatISO, addDays, subDays } from 'date-fns';
 
-// Generate dates for auctions (some active, some ended)
-const now = new Date();
-const getRandomFutureDate = (minHours: number, maxHours: number) => {
-  const futureDate = new Date(now);
-  const randomHours = Math.floor(Math.random() * (maxHours - minHours + 1)) + minHours;
-  futureDate.setHours(futureDate.getHours() + randomHours);
-  return futureDate.toISOString();
-};
+// Generate dates for active auctions
+const today = new Date();
+const auctionStart = formatISO(subDays(today, 2));
+const auctionEnd = formatISO(addDays(today, 5));
 
-const getRandomPastDate = (minHours: number, maxHours: number) => {
-  const pastDate = new Date(now);
-  const randomHours = Math.floor(Math.random() * (maxHours - minHours + 1)) + minHours;
-  pastDate.setHours(pastDate.getHours() - randomHours);
-  return pastDate.toISOString();
-};
-
-// Sample farmer IDs
-const farmerIds = [
-  "b69c5af8-6c7a-41a0-b0f2-a282c5e6d28f",
-  "7c3d5a9e-2f18-4b6d-9d3b-6e2a8c1f5d4e",
-  "5a2d9e7c-4f1b-6d3a-8c5e-2f9d7b3e1a6c"
-];
-
-// Sample farmer names
-const farmerNames = ["Raj Kumar", "Sita Patel", "Arjun Singh", "Priya Sharma", "Vikram Verma"];
+// Generate dates for ended auctions
+const endedAuctionStart = formatISO(subDays(today, 10));
+const endedAuctionEnd = formatISO(subDays(today, 1));
 
 // Mock product data
-export const mockProducts: Product[] = [
+export const mockProducts = [
   {
-    id: "a1b2c3d4-e5f6-4a5b-8c7d-9e8f7a6b5c4d",
-    name: "Premium Organic Rice",
-    category: "Grains",
-    farmer_id: farmerIds[0],
-    farmer_name: farmerNames[0],
-    quantity: 50,
-    unit: "kg",
-    price: 2500,
-    description: "Premium quality organic rice grown without pesticides",
-    image_url: "https://images.unsplash.com/photo-1586201375761-83865001e31c?q=80&w=2070&auto=format&fit=crop",
-    bid_start: getRandomPastDate(24, 48),
-    bid_end: getRandomFutureDate(24, 72),
-    highest_bid: 2800,
-    highest_bidder_id: null,
-    bids_count: 5,
-    available: true,
-    distance: 12
-  },
-  {
-    id: "b2c3d4e5-f6a7-5b6c-9d8e-0f1g2h3i4j5",
-    name: "Fresh Tomatoes",
-    category: "Vegetables",
-    farmer_id: farmerIds[1],
-    farmer_name: farmerNames[1],
-    quantity: 20,
-    unit: "kg",
-    price: 800,
-    description: "Fresh red tomatoes harvested this morning",
-    image_url: "https://images.unsplash.com/photo-1592924357229-339152ecb42e?q=80&w=2070&auto=format&fit=crop",
-    bid_start: getRandomPastDate(48, 72),
-    bid_end: getRandomFutureDate(2, 8),
-    highest_bid: 950,
-    highest_bidder_id: null,
-    bids_count: 7,
-    available: true,
-    distance: 5
-  },
-  {
-    id: "c3d4e5f6-g7h8-6c7d-0e1f-2g3h4i5j6k7",
-    name: "Wheat Flour",
-    category: "Grains",
-    farmer_id: farmerIds[2],
-    farmer_name: farmerNames[2],
+    id: '1',
+    name: 'Premium White Rice',
+    category: 'grains',
+    farmer_id: 'farmer-1',
+    farmer_name: 'Raman Singh',
     quantity: 100,
-    unit: "kg",
-    price: 4500,
-    description: "Fine wheat flour perfect for baking",
-    image_url: "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2072&auto=format&fit=crop",
-    bid_start: getRandomPastDate(72, 96),
-    bid_end: getRandomPastDate(2, 5),  // Ended auction
-    highest_bid: 5000,
-    highest_bidder_id: "current_user_id", // This will make it appear as a won auction for testing
-    bids_count: 12,
-    available: true,
-    distance: 18
+    unit: 'kg',
+    price: 50,
+    highest_bid: 60,
+    highest_bidder_id: 'other-user',
+    image_url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1170&q=80',
+    bid_start: auctionStart,
+    bid_end: auctionEnd,
+    description: 'Premium quality white rice grown organically in the fertile lands of Punjab.',
+    available: true
   },
   {
-    id: "d4e5f6g7-h8i9-7d8e-1f2g-3h4i5j6k7l8",
-    name: "Fresh Onions",
-    category: "Vegetables",
-    farmer_id: farmerIds[0],
-    farmer_name: farmerNames[0],
-    quantity: 30,
-    unit: "kg",
-    price: 1200,
-    description: "Premium quality red onions",
-    image_url: "https://images.unsplash.com/photo-1620574387735-3921fa6db75a?q=80&w=2070&auto=format&fit=crop",
-    bid_start: getRandomPastDate(48, 72),
-    bid_end: getRandomFutureDate(12, 36),
-    highest_bid: 1350,
-    highest_bidder_id: null,
-    bids_count: 4,
-    available: true,
-    distance: 8
+    id: '2',
+    name: 'Organic Wheat',
+    category: 'grains',
+    farmer_id: 'farmer-2',
+    farmer_name: 'Harpreet Kaur',
+    quantity: 200,
+    unit: 'kg',
+    price: 35,
+    highest_bid: 42,
+    highest_bidder_id: 'current_user_id',
+    image_url: 'https://images.unsplash.com/photo-1565530995968-2ea021eb71a9?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1074&q=80',
+    bid_start: auctionStart,
+    bid_end: auctionEnd,
+    description: 'Pesticide-free wheat grown using traditional farming methods.',
+    available: true
   },
   {
-    id: "e5f6g7h8-i9j0-8e9f-2g3h-4i5j6k7l8m9",
-    name: "Organic Potatoes",
-    category: "Vegetables",
-    farmer_id: farmerIds[1],
-    farmer_name: farmerNames[1],
+    id: '3',
+    name: 'Fresh Red Tomatoes',
+    category: 'vegetables',
+    farmer_id: 'farmer-3',
+    farmer_name: 'Rajesh Kumar',
+    quantity: 50,
+    unit: 'kg',
+    price: 30,
+    highest_bid: 35,
+    highest_bidder_id: 'other-user',
+    image_url: 'https://images.unsplash.com/photo-1546094096-0df4bcaaa337?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1074&q=80',
+    bid_start: endedAuctionStart,
+    bid_end: endedAuctionEnd,
+    description: 'Vine-ripened, juicy red tomatoes harvested at peak freshness.',
+    available: false
+  },
+  {
+    id: '4',
+    name: 'Farm Fresh Potatoes',
+    category: 'vegetables',
+    farmer_id: 'farmer-4',
+    farmer_name: 'Anita Sharma',
+    quantity: 150,
+    unit: 'kg',
+    price: 25,
+    highest_bid: 32,
+    highest_bidder_id: 'current_user_id',
+    image_url: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1170&q=80',
+    bid_start: endedAuctionStart,
+    bid_end: endedAuctionEnd,
+    description: 'High-quality potatoes perfect for making delicious curries and fries.',
+    available: false
+  },
+  {
+    id: '5',
+    name: 'Alphonso Mangoes',
+    category: 'fruits',
+    farmer_id: 'farmer-5',
+    farmer_name: 'Prakash Patel',
+    quantity: 75,
+    unit: 'kg',
+    price: 120,
+    highest_bid: 140,
+    highest_bidder_id: 'other-user',
+    image_url: 'https://images.unsplash.com/photo-1553279768-865429fa0078?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1074&q=80',
+    bid_start: auctionStart,
+    bid_end: auctionEnd,
+    description: 'Premium Alphonso mangoes, known for their sweetness and rich flavor. Limited seasonal availability.',
+    available: true
+  },
+  {
+    id: '6',
+    name: 'Organic Green Beans',
+    category: 'vegetables',
+    farmer_id: 'farmer-1',
+    farmer_name: 'Raman Singh',
     quantity: 40,
-    unit: "kg",
-    price: 1600,
-    description: "Organically grown potatoes, perfect for all dishes",
-    image_url: "https://images.unsplash.com/photo-1518977676601-b53f82aba655?q=80&w=2070&auto=format&fit=crop",
-    bid_start: getRandomPastDate(24, 48),
-    bid_end: getRandomPastDate(1, 3),  // Ended auction
-    highest_bid: 1800,
-    highest_bidder_id: "current_user_id", // This will make it appear as a won auction for testing
-    bids_count: 8,
-    available: true,
-    distance: 15
+    unit: 'kg',
+    price: 45,
+    highest_bid: 52,
+    highest_bidder_id: 'current_user_id',
+    image_url: 'https://images.unsplash.com/photo-1567375698348-5d9d5ae99de0?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1170&q=80',
+    bid_start: auctionStart,
+    bid_end: auctionEnd,
+    description: 'Crisp and fresh green beans grown without pesticides.',
+    available: true
   },
   {
-    id: "f6g7h8i9-j0k1-9f0g-3h4i-5j6k7l8m9n0",
-    name: "Fresh Corn",
-    category: "Vegetables",
-    farmer_id: farmerIds[2],
-    farmer_name: farmerNames[2],
-    quantity: 25,
-    unit: "kg",
-    price: 1000,
-    description: "Sweet corn freshly harvested",
-    image_url: "https://images.unsplash.com/photo-1551754655-cd27e38d2076?q=80&w=2070&auto=format&fit=crop",
-    bid_start: getRandomPastDate(72, 96),
-    bid_end: getRandomFutureDate(48, 72),
-    highest_bid: 1100,
-    highest_bidder_id: null,
-    bids_count: 3,
-    available: true,
-    distance: 20
+    id: '7',
+    name: 'Premium Basmati Rice',
+    category: 'grains',
+    farmer_id: 'farmer-2',
+    farmer_name: 'Harpreet Kaur',
+    quantity: 85,
+    unit: 'kg',
+    price: 90,
+    highest_bid: 102,
+    highest_bidder_id: 'other-user',
+    image_url: 'https://images.unsplash.com/photo-1613758235402-745466bb7efe?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1074&q=80',
+    bid_start: endedAuctionStart,
+    bid_end: endedAuctionEnd,
+    description: 'Aromatic long-grain basmati rice, perfect for biryanis and pulao.',
+    available: false
+  },
+  {
+    id: '8',
+    name: 'Organic Cotton',
+    category: 'fibers',
+    farmer_id: 'farmer-3',
+    farmer_name: 'Rajesh Kumar',
+    quantity: 300,
+    unit: 'kg',
+    price: 70,
+    highest_bid: 85,
+    highest_bidder_id: 'current_user_id',
+    image_url: 'https://images.unsplash.com/photo-1605001011156-cbf0b0f67a51?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1074&q=80',
+    bid_start: auctionStart,
+    bid_end: auctionEnd,
+    description: 'High-quality organic cotton grown without harmful chemicals.',
+    available: true
   }
 ];

@@ -1,63 +1,138 @@
 
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/context/AuthContext";
 
-// This is a mock function to simulate payment processing
-// In a real implementation, we would integrate with Stripe's API
-export const processPayment = async (
-  amount: number,
-  productId: string,
-  paymentMethod: string,
-  deliveryAddress?: {
-    addressLine1: string;
-    addressLine2?: string;
-    city: string;
-    state: string;
-    postalCode: string;
-  }
-) => {
+interface PaymentIntentRequest {
+  amount: number;
+  productId: string;
+  productName?: string;
+  paymentMethod?: 'card' | 'cod' | 'upi';
+}
+
+interface PaymentIntentResponse {
+  clientSecret?: string;
+  error?: string;
+}
+
+/**
+ * Creates a payment intent using the Stripe API through our Supabase Edge Function
+ */
+export const createPaymentIntent = async (
+  data: PaymentIntentRequest
+): Promise<PaymentIntentResponse> => {
   try {
-    console.log(`Processing payment of ₹${amount} for product ${productId} via ${paymentMethod}`);
-    
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    // In a real implementation, we would call our Stripe API endpoint here
-    // const { data, error } = await supabase.functions.invoke('create-payment-intent', {
-    //   body: { amount, productId, paymentMethod }
-    // });
-    
-    // For now, we'll just simulate a successful payment
-    const orderData = {
-      product_id: productId,
-      amount,
-      payment_method: paymentMethod,
-      payment_status: 'completed',
-      delivery_address: deliveryAddress || null
-    };
-    
-    // Log the order data
-    console.log('Order completed:', orderData);
-    
-    return { success: true, message: "Payment processed successfully" };
-  } catch (error) {
-    console.error("Payment processing error:", error);
-    return { success: false, message: "Failed to process payment" };
+    // Call Supabase Edge Function to create a payment intent
+    const { data: responseData, error } = await supabase.functions.invoke(
+      'create-payment-intent',
+      {
+        body: data,
+      }
+    );
+
+    if (error) {
+      console.error('Error creating payment intent:', error);
+      return { error: error.message || 'Failed to create payment' };
+    }
+
+    if (!responseData || !responseData.clientSecret) {
+      return { error: 'No client secret returned from the server' };
+    }
+
+    return { clientSecret: responseData.clientSecret };
+  } catch (error: any) {
+    console.error('Error in createPaymentIntent:', error);
+    return { error: error.message || 'An unexpected error occurred' };
   }
 };
 
-// Function to update product status after successful payment
-export const markProductAsPaid = async (productId: string) => {
+/**
+ * Records a completed payment in the database
+ */
+export const recordPayment = async (
+  productId: string,
+  bidId: string,
+  amount: number,
+  paymentMethod: string,
+  status: 'completed' | 'pending' | 'failed' = 'completed'
+) => {
   try {
-    const { error } = await supabase
-      .from('products')
-      .update({ available: false, paid: true })
-      .eq('id', productId);
-    
+    const { data, error } = await supabase
+      .from('payments')
+      .insert({
+        product_id: productId,
+        bid_id: bidId,
+        amount: amount,
+        payment_method: paymentMethod,
+        status: status
+      });
+
     if (error) throw error;
-    return { success: true };
-  } catch (error) {
-    console.error("Failed to update product payment status:", error);
-    return { success: false, message: "Failed to update payment status" };
+    
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('Error recording payment:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Process Cash on Delivery payment
+ */
+export const processCodPayment = async (
+  productId: string,
+  bidId: string,
+  amount: number
+) => {
+  try {
+    // For COD, we just record the payment as pending
+    const result = await recordPayment(
+      productId,
+      bidId,
+      amount,
+      'cod',
+      'pending'
+    );
+    
+    return { 
+      success: result.success, 
+      message: result.success ? 
+        'Cash on Delivery payment scheduled successfully' : 
+        'Failed to schedule Cash on Delivery payment' 
+    };
+  } catch (error: any) {
+    console.error('Error processing COD payment:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Process UPI payment
+ */
+export const processUpiPayment = async (
+  productId: string,
+  bidId: string,
+  amount: number,
+  upiId: string
+) => {
+  // In a real app, this would initiate a UPI payment flow
+  // For this demo, we'll just simulate success
+  try {
+    // Record the payment
+    const result = await recordPayment(
+      productId,
+      bidId,
+      amount,
+      'upi',
+      'completed'
+    );
+    
+    return { 
+      success: result.success, 
+      message: result.success ? 
+        'UPI payment processed successfully' : 
+        'Failed to process UPI payment' 
+    };
+  } catch (error: any) {
+    console.error('Error processing UPI payment:', error);
+    return { success: false, message: error.message };
   }
 };

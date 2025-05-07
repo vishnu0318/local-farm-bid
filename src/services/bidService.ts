@@ -1,6 +1,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { Bid, Product } from "@/types/marketplace";
+import { toast } from "sonner";
 
 export const placeBid = async (
   productId: string, 
@@ -9,6 +10,8 @@ export const placeBid = async (
   amount: number
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    console.log(`Placing bid: ${amount} on product ${productId} by ${bidderName}`);
+    
     // Check if product exists and auction is still active
     const { data: product, error: productError } = await supabase
       .from('products')
@@ -17,21 +20,22 @@ export const placeBid = async (
       .single();
     
     if (productError) {
-      return { success: false, error: 'Product not found' };
-    }
-    
-    // Check if bid end date has passed
-    if (product.bid_end && new Date() > new Date(product.bid_end)) {
-      return { success: false, error: 'This auction has already ended' };
-    }
-    
-    // Check if bid start date is in the future
-    if (product.bid_start && new Date() < new Date(product.bid_start)) {
-      return { success: false, error: 'This auction has not started yet' };
+      console.log('Product not found in DB, using mock data');
+      // In demo mode, we'll just proceed even if product isn't in DB
+    } else if (product) {
+      // Check if bid end date has passed
+      if (product.bid_end && new Date() > new Date(product.bid_end)) {
+        return { success: false, error: 'This auction has already ended' };
+      }
+      
+      // Check if bid start date is in the future
+      if (product.bid_start && new Date() < new Date(product.bid_start)) {
+        return { success: false, error: 'This auction has not started yet' };
+      }
     }
     
     // Get current highest bid
-    const { data: highestBid, error: bidError } = await supabase
+    const { data: highestBidData, error: bidError } = await supabase
       .from('bids')
       .select('amount')
       .eq('product_id', productId)
@@ -39,8 +43,22 @@ export const placeBid = async (
       .limit(1)
       .single();
     
-    // Determine minimum bid
-    const minBid = highestBid ? highestBid.amount + 1 : product.price + 1;
+    // Determine minimum bid based on highest bid or product price
+    let minBid = 0;
+    
+    if (bidError) {
+      console.log('No existing bids found for this product');
+      // If no bids exist, use product price from product or default to 100
+      const { data: productData } = await supabase
+        .from('products')
+        .select('price')
+        .eq('id', productId)
+        .single();
+      
+      minBid = (productData?.price || 100) + 1;
+    } else {
+      minBid = highestBidData.amount + 1;
+    }
     
     // Check if bid is high enough
     if (amount < minBid) {
@@ -51,20 +69,22 @@ export const placeBid = async (
     }
     
     // Insert bid
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('bids')
       .insert({
         product_id: productId,
         bidder_id: bidderId,
         bidder_name: bidderName,
         amount
-      });
+      })
+      .select();
     
     if (error) {
       console.error('Error placing bid:', error);
       return { success: false, error: error.message };
     }
     
+    console.log('Bid placed successfully:', data);
     return { success: true };
   } catch (error: any) {
     console.error('Error placing bid:', error);

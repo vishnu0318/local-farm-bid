@@ -21,6 +21,7 @@ serve(async (req) => {
     // Ensure STRIPE_SECRET_KEY is set in environment variables
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) {
+      console.log("Missing STRIPE_SECRET_KEY");
       throw new Error("STRIPE_SECRET_KEY is not set in environment variables");
     }
     
@@ -31,7 +32,13 @@ serve(async (req) => {
     });
 
     // Get request body
-    const { amount, productId, paymentMethod } = await req.json();
+    const { amount, productId, productName, paymentMethod } = await req.json();
+    
+    if (!amount || amount < 1) {
+      throw new Error("Invalid amount provided");
+    }
+    
+    console.log(`Creating payment intent: ${amount} INR for product ${productId}, method: ${paymentMethod}`);
     
     // Create Supabase client using anon key (for read operations)
     const supabaseClient = createClient(
@@ -45,20 +52,24 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     
     if (userError || !user) {
+      console.log("User not authenticated", userError);
       throw new Error("User not authenticated");
     }
 
     // Create a PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount * 100, // Convert to cents
+      amount: Math.round(amount * 100), // Convert to cents
       currency: "inr",
       payment_method_types: ["card"],
       metadata: {
         product_id: productId,
-        user_id: user.id
+        user_id: user.id,
+        product_name: productName || "Unknown product"
       },
       receipt_email: user.email,
     });
+
+    console.log(`Payment intent created: ${paymentIntent.id}`);
 
     return new Response(JSON.stringify({ 
       clientSecret: paymentIntent.client_secret 
@@ -67,6 +78,7 @@ serve(async (req) => {
       status: 200,
     });
   } catch (error) {
+    console.error("Error creating payment intent:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

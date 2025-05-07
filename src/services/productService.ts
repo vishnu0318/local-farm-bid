@@ -1,5 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
+import { mockProducts } from "./mockData";
 
 export interface Product {
   id: string;
@@ -30,6 +31,7 @@ export interface Bid {
 
 export const getProductById = async (productId: string): Promise<Product | null> => {
   try {
+    // Check database first
     const { data, error } = await supabase
       .from('products')
       .select('*')
@@ -37,13 +39,29 @@ export const getProductById = async (productId: string): Promise<Product | null>
       .single();
     
     if (error) {
-      console.error('Error fetching product:', error);
+      console.error('Error fetching product from DB:', error);
+      
+      // Fall back to mock data if not found in database
+      const mockProduct = mockProducts.find(p => p.id === productId);
+      if (mockProduct) {
+        console.log('Found product in mock data:', mockProduct);
+        return mockProduct;
+      }
+      
       return null;
     }
     
     return data as Product;
   } catch (error) {
     console.error('Error fetching product:', error);
+    
+    // Last resort fallback to mock data
+    const mockProduct = mockProducts.find(p => p.id === productId);
+    if (mockProduct) {
+      console.log('Found product in mock data after error:', mockProduct);
+      return mockProduct;
+    }
+    
     return null;
   }
 };

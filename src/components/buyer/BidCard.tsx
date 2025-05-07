@@ -1,6 +1,6 @@
 
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Eye, IndianRupee } from 'lucide-react';
@@ -22,7 +22,7 @@ export const BidCard = ({ bid, bidStatus, timeLeft, activeTab }: BidCardProps) =
   const isActive = activeTab === 'active';
   
   return (
-    <Card key={bid.id}>
+    <Card key={bid.id} className="overflow-hidden h-full flex flex-col">
       <div className="aspect-w-16 aspect-h-9 relative">
         <img 
           src={bid.product?.image_url || '/placeholder.svg'} 
@@ -40,15 +40,15 @@ export const BidCard = ({ bid, bidStatus, timeLeft, activeTab }: BidCardProps) =
           {bidStatus.label}
         </Badge>
       </div>
-      <CardHeader>
-        <CardTitle>{bid.product?.name}</CardTitle>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="text-lg">{bid.product?.name}</CardTitle>
         <p className="text-sm text-gray-500">
           {isWon ? `By ${bid.product?.farmer_name}` : 
           isActive ? `${timeLeft}` : 
           `Bid placed on ${format(new Date(bid.created_at), 'MMM d, yyyy')}`}
         </p>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 pt-0 flex-grow flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-sm text-gray-500">Your Bid</p>
@@ -70,24 +70,24 @@ export const BidCard = ({ bid, bidStatus, timeLeft, activeTab }: BidCardProps) =
             </div>
           )}
         </div>
-        <div className="flex justify-between items-center">
-          <Link to={`/buyer/product/${bid.product_id}`}>
-            <Button className="flex items-center gap-2" variant="outline">
-              <Eye className="h-4 w-4" />
-              <span>View Product</span>
+        <div className="mt-auto flex justify-between items-center gap-2">
+          <Link to={`/buyer/product/${bid.product_id}`} className="flex-1">
+            <Button className="text-xs h-9 w-full flex items-center gap-1" variant="outline">
+              <Eye className="h-3 w-3" />
+              <span>View</span>
             </Button>
           </Link>
           {bidStatus.status === 'outbid' && (
-            <Link to={`/buyer/product/${bid.product_id}`}>
-              <Button>
+            <Link to={`/buyer/product/${bid.product_id}`} className="flex-1">
+              <Button className="text-xs h-9 w-full">
                 Increase Bid
               </Button>
             </Link>
           )}
           {bidStatus.status === 'won' && (
-            <Link to={`/buyer/payment-details?product=${bid.product_id}`}>
-              <Button>
-                Complete Purchase
+            <Link to={`/buyer/payment-details?product=${bid.product_id}`} className="flex-1">
+              <Button className="text-xs h-9 w-full">
+                Pay Now
               </Button>
             </Link>
           )}
