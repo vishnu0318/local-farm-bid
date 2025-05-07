@@ -51,7 +51,7 @@ export const markProductAsPaid = async (productId: string) => {
   try {
     const { error } = await supabase
       .from('products')
-      .update({ paid: true })
+      .update({ available: false, paid: true })
       .eq('id', productId);
     
     if (error) throw error;
