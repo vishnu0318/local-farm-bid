@@ -7,13 +7,11 @@ import { Eye, IndianRupee } from 'lucide-react';
 import { format } from 'date-fns';
 import { Bid } from '@/types/marketplace';
 import { useAuth } from '@/context/AuthContext';
+import { BidStatus } from '@/hooks/useBidsData';
 
 interface BidCardProps {
   bid: Bid;
-  bidStatus: {
-    status: 'winning' | 'outbid' | 'won' | 'lost';
-    label: string;
-  };
+  bidStatus: BidStatus;
   timeLeft: string;
   activeTab: string;
 }

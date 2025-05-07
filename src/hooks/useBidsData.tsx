@@ -5,6 +5,11 @@ import { Bid } from '@/types/marketplace';
 import { formatDistance } from 'date-fns';
 import { mockProducts } from '@/services/mockData';
 
+export type BidStatus = {
+  status: 'winning' | 'outbid' | 'won' | 'lost';
+  label: string;
+};
+
 export const useBidsData = () => {
   const { user } = useAuth();
   const [bids, setBids] = useState<Bid[]>([]);
@@ -86,7 +91,7 @@ export const useBidsData = () => {
   }, [user]);
 
   // Determine bid status
-  const getBidStatus = (bid: Bid) => {
+  const getBidStatus = (bid: Bid): BidStatus => {
     const now = new Date();
     const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
     const isEnded = bidEnd && now > bidEnd;
