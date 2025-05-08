@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +12,7 @@ import { processPayment, markProductAsPaid } from '@/services/paymentService';
 import { mockProducts } from '@/services/mockData';
 import { Product } from '@/types/marketplace';
 import { toast } from "sonner";
+import { getProductById } from '@/services/productService';
 
 const PaymentDetails = () => {
   const { user } = useAuth();
@@ -54,8 +54,19 @@ const PaymentDetails = () => {
         return;
       }
       
-      // Find the product from mock data (in a real app, we'd fetch from the API)
-      const foundProduct = mockProducts.find(p => p.id === productId);
+      // Try to fetch the product from the database first
+      let foundProduct: Product | null = null;
+      
+      try {
+        foundProduct = await getProductById(productId);
+      } catch (error) {
+        console.error("Error fetching product from database:", error);
+      }
+      
+      // If not found in database, try to find it in mock data
+      if (!foundProduct) {
+        foundProduct = mockProducts.find(p => p.id === productId) || null;
+      }
       
       if (!foundProduct) {
         toast.error("Product not found");

@@ -54,7 +54,7 @@ export const recordPayment = async (
   status: 'completed' | 'pending' | 'failed' = 'completed'
 ) => {
   try {
-    // Instead of inserting into a payments table, we'll update the product status
+    // Update the product status
     const { data, error } = await supabase
       .from('products')
       .update({
