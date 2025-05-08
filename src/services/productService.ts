@@ -147,8 +147,40 @@ export const deleteProduct = async (id: string): Promise<{ success: boolean; err
     }
     
     return { success: true };
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error deleting product:', error);
     return { success: false, error: error.message || "An unexpected error occurred" };
   }
 };
+
+export const placeBid = async(
+  product: Product,
+  user: { id: string; name: string },
+  bidAmount: number,
+  setBidAmount: (value: number) => void,
+  setIsSubmitting: (value: boolean) => void
+)=>{
+  try {
+    const { data, error } = await supabase.from("bids").insert([
+      {
+        product_id: product.id,
+        bidder_id: user.id,
+        bidder_name: user.name,
+        amount: bidAmount,
+      },
+    ]);
+
+    if (error) {
+      console.error(error);
+      return { success: false, error: error.message};
+    } else {
+      setBidAmount(bidAmount + 5);
+      return { success: true, message: 'Your bid has been placed successfully!'};
+    }
+  } catch (error) {
+    console.error(error);
+    return { success: false, error: error.message};
+  } finally {
+    setIsSubmitting(false);
+  }
+}

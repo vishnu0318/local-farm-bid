@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { IndianRupee } from 'lucide-react';
 import { Product } from '@/services/productService';
+import { supabase } from '@/integrations/supabase/client';
 
 interface BidFormProps {
   crop: Product;
@@ -60,14 +61,25 @@ const BidForm = ({ crop }: BidFormProps) => {
     setIsSubmitting(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      placeBid(crop.id, user.id, user.name, bidAmount);
-      toast.success('Your bid has been placed successfully!');
-      setBidAmount(bidAmount + 5);
+      const {error} = await supabase.from('bids').insert([
+        {
+          product_id: crop.id,
+          bidder_id: user.id,
+          bidder_name: user.name,
+          amount: bidAmount,
+        },
+      ]);
+  
+      if (error) {
+        console.error(error);
+        toast.error('Failed to place bid. Please try again.');
+      } else {
+        toast.success('Your bid has been placed successfully!');
+        setBidAmount(bidAmount + 5);
+      }
     } catch (error) {
-      toast.error('Failed to place bid. Please try again.');
       console.error(error);
+      toast.error('Unexpected error occurred. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
