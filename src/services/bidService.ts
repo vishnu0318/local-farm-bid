@@ -219,3 +219,49 @@ export const getUserBidsWithProducts = async (userId: string): Promise<Bid[]> =>
     return [];
   }
 };
+
+// Count total bids for a product
+export const countProductBids = async (productId: string): Promise<number> => {
+  try {
+    const { count, error } = await supabase
+      .from('bids')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', productId);
+    
+    if (error) {
+      console.error('Error counting bids:', error);
+      return 0;
+    }
+    
+    return count || 0;
+  } catch (error) {
+    console.error('Error counting bids:', error);
+    return 0;
+  }
+};
+
+// Get bid history for a product with bidder details
+export const getBidHistoryForFarmer = async (productId: string): Promise<Bid[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('bids')
+      .select(`
+        id,
+        bidder_name,
+        amount,
+        created_at
+      `)
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching bid history:', error);
+      return [];
+    }
+    
+    return data as Bid[];
+  } catch (error) {
+    console.error('Error fetching bid history:', error);
+    return [];
+  }
+};

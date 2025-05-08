@@ -95,7 +95,31 @@ const BidForm = ({ product, onBidSuccess, currentHighestBid, isWinner }: BidForm
   };
 
   // If user won the auction
-  if (isWinner) {
+  if (isWinner && product.paid) {
+    return (
+      <Card className="p-6 border-2 border-green-500">
+        <CardContent className="p-0 space-y-4">
+          <div className="text-center">
+            <h3 className="text-xl font-semibold text-green-600">Congratulations!</h3>
+            <p className="text-gray-600">You've won and paid for this auction.</p>
+          </div>
+          
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-sm text-gray-500">Your Winning Bid</p>
+              <p className="text-xl font-bold flex items-center text-green-600">
+                <IndianRupee className="h-4 w-4 mr-0.5" />
+                {currentHighestBid}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  // If user won the auction but hasn't paid yet
+  if (isWinner && !product.paid) {
     return (
       <Card className="p-6 border-2 border-green-500">
         <CardContent className="p-0 space-y-4">

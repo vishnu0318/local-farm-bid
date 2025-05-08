@@ -27,6 +27,7 @@ const ProductDetail = () => {
   const [isUserHighestBidder, setIsUserHighestBidder] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [auctionEnded, setAuctionEnded] = useState(false);
+  const [productPaid, setProductPaid] = useState(false);
 
   // Fetch product details and bids
   useEffect(() => {
@@ -46,6 +47,7 @@ const ProductDetail = () => {
         if (productError) throw productError;
         
         setProduct(productData);
+        setProductPaid(productData.paid || false);
         
         // Fetch farmer details separately
         if (productData?.farmer_id) {
@@ -372,6 +374,56 @@ const ProductDetail = () => {
         
         {/* Bidding section */}
         <div>
+          {/* If user won the auction and product is not paid yet, show payment button */}
+          {auctionEnded && isUserHighestBidder && !productPaid && (
+            <Card className="p-6 border-2 border-green-500 mb-6">
+              <CardContent className="p-0 space-y-4">
+                <div className="text-center">
+                  <h3 className="text-xl font-semibold text-green-600">Congratulations!</h3>
+                  <p className="text-gray-600">You've won this auction.</p>
+                </div>
+                
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Your Winning Bid</p>
+                    <p className="text-xl font-bold flex items-center text-green-600">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {highestBid}
+                    </p>
+                  </div>
+                </div>
+                
+                <Link to={`/buyer/payment-details?product=${product.id}`} className="w-full">
+                  <Button className="w-full bg-green-600 hover:bg-green-700">Complete Purchase</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* If user won the auction and product is already paid, show paid status */}
+          {auctionEnded && isUserHighestBidder && productPaid && (
+            <Card className="p-6 border-2 border-green-500 mb-6">
+              <CardContent className="p-0 space-y-4">
+                <div className="text-center">
+                  <h3 className="text-xl font-semibold text-green-600">Payment Complete</h3>
+                  <p className="text-gray-600">You've successfully purchased this product.</p>
+                  <Badge className="mt-2 bg-green-600">Paid</Badge>
+                </div>
+                
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Amount Paid</p>
+                    <p className="text-xl font-bold flex items-center text-green-600">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {highestBid}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* Regular bid form */}
           <BidForm 
             product={product} 
             onBidSuccess={handleBidSuccess} 

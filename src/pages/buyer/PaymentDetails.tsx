@@ -1,349 +1,295 @@
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Loader2, IndianRupee, CreditCard } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { createPaymentIntent, processCodPayment, processUpiPayment } from '@/services/paymentService';
-import { getProductById } from '@/services/productService';
-import { getHighestBid } from '@/services/bidService';
-import { Product } from '@/types/marketplace';
-import { toast } from "sonner";
+import { loadStripe } from '@stripe/stripe-js';
+import { IndianRupee, CreditCard, Wallet, Banknote } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+// Initialize Stripe
+const stripePromise = loadStripe("pk_test_51OLPCESIYS9RARqbGN1mSEVAD4Dc2njuu5riGLFQPxV1qVjJ9SeBBAAzwkZLEjtEr3HpivbvLfWLQFtibQyMvTWq00ZC7FZu82");
 
 const PaymentDetails = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<'card' | 'cod' | 'upi'>('card');
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-  const [upiId, setUpiId] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [bidAmount, setBidAmount] = useState<number>(0);
-
-  // Extract product ID from query params
+  const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const productId = queryParams.get('product');
 
+  const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState('card');
+  const [processing, setProcessing] = useState(false);
+
+  // Load product details
   useEffect(() => {
-    const fetchProductDetails = async () => {
-      setLoading(true);
-      
-      if (!productId) {
-        toast.error("No product specified for payment");
-        navigate('/buyer/my-bids');
-        return;
-      }
-      
-      // Try to fetch the product from the database
-      let foundProduct: Product | null = null;
-      
+    if (!productId) {
+      toast.error("No product selected for payment");
+      navigate('/buyer/my-bids');
+      return;
+    }
+
+    const fetchProduct = async () => {
       try {
-        foundProduct = await getProductById(productId);
-        
-        if (!foundProduct) {
-          toast.error("Product not found");
+        // Get the product
+        const { data: productData, error: productError } = await supabase
+          .from('products')
+          .select(`
+            *,
+            bids(amount, bidder_id)
+          `)
+          .eq('id', productId)
+          .single();
+
+        if (productError) throw productError;
+
+        // Check if current user is the highest bidder
+        if (productData?.bids && productData.bids.length > 0) {
+          // Sort bids by amount (descending)
+          const sortedBids = [...productData.bids].sort((a, b) => b.amount - a.amount);
+          const highestBid = sortedBids[0];
+          
+          if (highestBid.bidder_id !== user?.id) {
+            toast.error("You are not the highest bidder for this product");
+            navigate('/buyer/my-bids');
+            return;
+          }
+          
+          // Set the winning bid amount
+          productData.winningBid = highestBid.amount;
+        } else {
+          toast.error("No bids found for this product");
           navigate('/buyer/my-bids');
           return;
         }
         
-        // Get highest bid amount
-        const highestBid = await getHighestBid(productId);
-        setBidAmount(highestBid);
-        
-        setProduct(foundProduct);
-        
-        // If user has an address in their profile, use it as default
-        if (user) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('address')
-            .eq('id', user.id)
-            .single();
-            
-          if (profileData?.address) {
-            setDeliveryAddress(profileData.address);
-          }
-        }
+        setProduct(productData);
       } catch (error) {
         console.error("Error fetching product:", error);
         toast.error("Failed to load product details");
-        navigate('/buyer/my-bids');
       } finally {
         setLoading(false);
       }
     };
-    
-    fetchProductDetails();
-  }, [productId, navigate, user]);
 
-  const handlePayNow = async () => {
-    if (!user || !product) return;
+    fetchProduct();
+  }, [productId, user?.id, navigate]);
+
+  const handlePayment = async () => {
+    if (!product || !user) return;
     
-    setPaymentStatus('processing');
+    setProcessing(true);
     
     try {
-      if (!deliveryAddress) {
-        toast.error("Please enter a delivery address");
-        setPaymentStatus('idle');
-        return;
-      }
+      // Get the payment amount from the winning bid
+      const amount = product.winningBid;
       
-      if (paymentMethod === 'upi' && !upiId) {
-        toast.error("Please enter your UPI ID");
-        setPaymentStatus('idle');
-        return;
-      }
-      
-      // Process payment based on selected method
       if (paymentMethod === 'card') {
         // Create a Stripe payment intent
-        const amount = bidAmount; // Use bid amount
-        const { clientSecret, error } = await createPaymentIntent({
-          amount: amount,
-          productId: product.id,
-          productName: product.name,
-          paymentMethod: 'card',
+        const response = await fetch('/api/create-payment-intent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await supabase.auth.getSession().then(res => res.data.session?.access_token)}`
+          },
+          body: JSON.stringify({
+            amount,
+            productId: product.id,
+            productName: product.name,
+            paymentMethod
+          })
         });
         
-        if (error || !clientSecret) {
-          toast.error(error || "Payment failed. Please try again.");
-          setPaymentStatus('error');
-          return;
+        const { clientSecret, error } = await response.json();
+        
+        if (error) {
+          throw new Error(error);
+        }
+        
+        // Load Stripe
+        const stripe = await stripePromise;
+        
+        if (!stripe) {
+          throw new Error('Failed to load Stripe');
         }
         
         // Redirect to Stripe checkout
-        // In a real integration, we would use Stripe Elements here
-        // For now, just simulate success
-        toast.success("Payment processed successfully!");
-        setPaymentStatus('success');
+        const result = await stripe.confirmCardPayment(clientSecret, {
+          payment_method: {
+            card: {
+              token: 'tok_visa' // Use a test token for development
+            },
+            billing_details: {
+              name: user.user_metadata?.name || user.email,
+              email: user.email
+            }
+          }
+        });
         
-        // Redirect to success page after a delay
-        setTimeout(() => {
-          navigate('/buyer/my-bids');
-        }, 2000);
-      } 
-      else if (paymentMethod === 'upi') {
-        // Process UPI payment
-        const result = await processUpiPayment(product.id, bidAmount, upiId);
-        if (result.success) {
-          toast.success(result.message || "UPI payment processed successfully!");
-          setPaymentStatus('success');
-          
-          // Redirect to success page after a delay
-          setTimeout(() => {
-            navigate('/buyer/my-bids');
-          }, 2000);
-        } else {
-          toast.error(result.message || "Payment failed. Please try again.");
-          setPaymentStatus('error');
+        if (result.error) {
+          throw new Error(result.error.message);
         }
-      } 
-      else if (paymentMethod === 'cod') {
-        // Process COD payment
-        const result = await processCodPayment(product.id, bidAmount);
-        if (result.success) {
-          toast.success(result.message || "Cash on Delivery order placed successfully!");
-          setPaymentStatus('success');
+        
+        // Update product as paid
+        await supabase
+          .from('products')
+          .update({ paid: true })
+          .eq('id', product.id);
           
-          // Redirect to success page after a delay
-          setTimeout(() => {
-            navigate('/buyer/my-bids');
-          }, 2000);
-        } else {
-          toast.error(result.message || "Order failed. Please try again.");
-          setPaymentStatus('error');
-        }
+        toast.success("Payment successful!");
+        navigate(`/buyer/product/${product.id}`);
+      } else if (paymentMethod === 'upi') {
+        // Simulate UPI payment
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Update product as paid
+        await supabase
+          .from('products')
+          .update({ paid: true })
+          .eq('id', product.id);
+          
+        toast.success("UPI payment successful!");
+        navigate(`/buyer/product/${product.id}`);
+      } else if (paymentMethod === 'cod') {
+        // Cash on delivery
+        await supabase
+          .from('products')
+          .update({ paid: true })
+          .eq('id', product.id);
+          
+        toast.success("Cash on delivery order placed successfully!");
+        navigate(`/buyer/product/${product.id}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Payment error:", error);
-      toast.error("Payment failed. Please try again.");
-      setPaymentStatus('error');
+      toast.error(error.message || "Payment failed. Please try again.");
+    } finally {
+      setProcessing(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-4" />
-        <p className="text-gray-500">Loading payment details...</p>
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
       </div>
     );
   }
 
-  if (paymentStatus === 'success') {
+  if (!product) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <Card className="border-green-500">
-          <CardHeader>
-            <div className="flex items-center justify-center mb-4">
-              <CheckCircle className="h-16 w-16 text-green-500" />
-            </div>
-            <CardTitle className="text-center text-2xl">Payment Successful!</CardTitle>
-          </CardHeader>
-          <CardContent className="text-center">
-            <p className="mb-4">
-              Your order has been confirmed. You will receive the product details shortly.
-            </p>
-            <Button onClick={() => navigate('/buyer/my-bids')} className="mt-4">
-              View My Orders
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="text-center py-8">
+        <h2 className="text-2xl font-bold">Product not found</h2>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Complete Your Purchase</h1>
+    <div className="container max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-8">Complete Your Purchase</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Order summary */}
         <div className="md:col-span-2">
           <Card>
             <CardHeader>
-              <CardTitle>Payment Details</CardTitle>
+              <CardTitle>Order Summary</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h2 className="text-lg font-medium mb-4">Payment Method</h2>
-                <RadioGroup value={paymentMethod} onValueChange={(value: any) => setPaymentMethod(value)}>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <RadioGroupItem value="card" id="card" />
-                    <Label htmlFor="card" className="flex items-center">
-                      <CreditCard className="h-4 w-4 mr-2" />
-                      Credit / Debit Card
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <RadioGroupItem value="upi" id="upi" />
-                    <Label htmlFor="upi">UPI Payment</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="cod" id="cod" />
-                    <Label htmlFor="cod">Cash on Delivery</Label>
-                  </div>
-                </RadioGroup>
-              </div>
-              
-              <Separator />
-              
-              {paymentMethod === 'upi' && (
-                <div>
-                  <h2 className="text-lg font-medium mb-4">UPI Details</h2>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
                   <div>
-                    <Label htmlFor="upiId">UPI ID</Label>
-                    <Input 
-                      id="upiId" 
-                      value={upiId} 
-                      onChange={(e) => setUpiId(e.target.value)}
-                      placeholder="example@upi"
-                      className="mt-1"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Enter your UPI ID (e.g. name@bank)</p>
+                    <h3 className="font-semibold text-lg">{product.name}</h3>
+                    <p className="text-sm text-gray-500">
+                      {product.quantity} {product.unit}
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    <IndianRupee className="h-4 w-4 mr-0.5" />
+                    <span>{product.winningBid}</span>
                   </div>
                 </div>
-              )}
-              
-              <div>
-                <h2 className="text-lg font-medium mb-4">Delivery Address</h2>
-                <div>
-                  <Textarea 
-                    value={deliveryAddress} 
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Enter your full delivery address"
-                    className="min-h-[100px]"
-                  />
+                
+                <Separator />
+                
+                <div className="flex justify-between font-semibold">
+                  <span>Total</span>
+                  <div className="flex items-center">
+                    <IndianRupee className="h-4 w-4 mr-0.5" />
+                    <span>{product.winningBid}</span>
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
         
-        {/* Order summary */}
+        {/* Payment methods */}
         <div>
           <Card>
             <CardHeader>
-              <CardTitle>Order Summary</CardTitle>
+              <CardTitle>Payment Method</CardTitle>
             </CardHeader>
             <CardContent>
-              {product && (
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="h-16 w-16 rounded-md overflow-hidden bg-gray-100">
-                      <img 
-                        src={product.image_url || '/placeholder.svg'} 
-                        alt={product.name}
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div>
-                      <p className="font-medium">{product.name}</p>
-                      <p className="text-sm text-gray-500">Quantity: {product.quantity} {product.unit}</p>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span>Winning Bid Amount</span>
-                      <span className="font-medium flex items-center">
-                        <IndianRupee className="h-3 w-3 mr-0.5" />
-                        {bidAmount}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Delivery Fee</span>
-                      <span className="font-medium flex items-center">
-                        <IndianRupee className="h-3 w-3 mr-0.5" />
-                        0
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Taxes</span>
-                      <span className="font-medium flex items-center">
-                        <IndianRupee className="h-3 w-3 mr-0.5" />
-                        0
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <Separator />
-                  
-                  <div className="flex justify-between text-lg font-semibold">
-                    <span>Total</span>
-                    <span className="flex items-center">
-                      <IndianRupee className="h-4 w-4 mr-0.5" />
-                      {bidAmount}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter>
-              <Button 
-                className="w-full" 
-                onClick={handlePayNow}
-                disabled={paymentStatus === 'processing'}
+              <RadioGroup 
+                value={paymentMethod} 
+                onValueChange={setPaymentMethod}
+                className="space-y-4"
               >
-                {paymentStatus === 'processing' ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="card" id="card" />
+                  <Label htmlFor="card" className="flex items-center">
+                    <CreditCard className="h-4 w-4 mr-2" />
+                    Credit/Debit Card
+                  </Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="upi" id="upi" />
+                  <Label htmlFor="upi" className="flex items-center">
+                    <Wallet className="h-4 w-4 mr-2" />
+                    UPI
+                  </Label>
+                </div>
+                
+                {paymentMethod === 'upi' && (
+                  <div className="pl-6 mt-2">
+                    <Label htmlFor="upiId">UPI ID</Label>
+                    <Input id="upiId" placeholder="username@upi" className="mt-1" />
+                  </div>
+                )}
+                
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="cod" id="cod" />
+                  <Label htmlFor="cod" className="flex items-center">
+                    <Banknote className="h-4 w-4 mr-2" />
+                    Cash on Delivery
+                  </Label>
+                </div>
+              </RadioGroup>
+              
+              <Button 
+                className="w-full mt-6" 
+                onClick={handlePayment}
+                disabled={processing}
+              >
+                {processing ? (
+                  <span className="flex items-center">
+                    <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-2"></div>
                     Processing...
-                  </>
+                  </span>
                 ) : (
-                  'Pay Now'
+                  <span>Complete Payment</span>
                 )}
               </Button>
-            </CardFooter>
+            </CardContent>
           </Card>
         </div>
       </div>
