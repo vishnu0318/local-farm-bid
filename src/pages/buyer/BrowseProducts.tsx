@@ -14,7 +14,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Product } from '@/types/marketplace';
 import { toast } from "sonner";
 import { formatDistance } from 'date-fns';
-import { mockProducts } from '@/services/mockData';
+import { getHighestBid } from '@/services/bidService';
 
 const BrowseProducts = () => {
   const { user } = useAuth();
@@ -29,23 +29,22 @@ const BrowseProducts = () => {
       setLoading(true);
       
       try {
-        // In a real implementation, we would fetch from Supabase
-        // const { data, error } = await supabase
-        //   .from('products')
-        //   .select('*')
-        //   .eq('available', true);
+        // Fetch actual products from Supabase
+        const { data: fetchedProducts, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('available', true);
         
-        // For now, use our mock data
-        // Add the current user id to simulate winning some auctions
-        const productsWithUserId = mockProducts.map(product => {
-          if (product.highest_bidder_id === "current_user_id" && user) {
-            return { ...product, highest_bidder_id: user.id };
-          }
-          return product;
-        });
+        if (error) throw error;
+        
+        if (!fetchedProducts || fetchedProducts.length === 0) {
+          setProducts([]);
+          setLoading(false);
+          return;
+        }
         
         // Add timeLeft property to each product
-        const productsWithTimeLeft = productsWithUserId.map(product => {
+        const productsWithTimeLeft = await Promise.all(fetchedProducts.map(async (product) => {
           const endTime = product.bid_end ? new Date(product.bid_end) : null;
           const now = new Date();
           
@@ -58,17 +57,38 @@ const BrowseProducts = () => {
             }
           }
           
-          return { ...product, timeLeft };
-        });
+          // Get highest bid for product
+          const highestBid = await getHighestBid(product.id);
+          
+          // Check if current user is the highest bidder
+          let isUserHighestBidder = false;
+          if (user) {
+            const { data: highestBidData, error: bidError } = await supabase
+              .from('bids')
+              .select('bidder_id')
+              .eq('product_id', product.id)
+              .order('amount', { ascending: false })
+              .limit(1)
+              .single();
+            
+            if (!bidError && highestBidData) {
+              isUserHighestBidder = highestBidData.bidder_id === user.id;
+            }
+          }
+          
+          return { 
+            ...product, 
+            timeLeft,
+            highest_bid: highestBid,
+            highest_bidder_id: isUserHighestBidder ? user?.id : undefined,
+          };
+        }));
         
-        setTimeout(() => {
-          setProducts(productsWithTimeLeft);
-          setLoading(false);
-        }, 1000); // Simulate network delay
-        
+        setProducts(productsWithTimeLeft);
       } catch (error) {
         console.error('Error fetching products:', error);
         toast.error('Failed to load products');
+      } finally {
         setLoading(false);
       }
     };
@@ -109,7 +129,7 @@ const BrowseProducts = () => {
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     switch (sortBy) {
       case 'price-low':
-        return a.highest_bid || a.price - (b.highest_bid || b.price);
+        return (a.highest_bid || a.price) - (b.highest_bid || b.price);
       case 'price-high':
         return (b.highest_bid || b.price) - (a.highest_bid || a.price);
       case 'ending-soon':
@@ -117,8 +137,6 @@ const BrowseProducts = () => {
         if (!a.bid_end) return 1;
         if (!b.bid_end) return -1;
         return new Date(a.bid_end).getTime() - new Date(b.bid_end).getTime();
-      case 'distance':
-        return (a.distance || 0) - (b.distance || 0);
       default:
         return 0;
     }
@@ -166,7 +184,6 @@ const BrowseProducts = () => {
                 <SelectItem value="price-low">Price: Low to High</SelectItem>
                 <SelectItem value="price-high">Price: High to Low</SelectItem>
                 <SelectItem value="ending-soon">Ending Soon</SelectItem>
-                <SelectItem value="distance">Distance</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -234,7 +251,7 @@ const BrowseProducts = () => {
                   </div>
                   <CardDescription className="flex items-center">
                     <MapPin className="h-3 w-3 mr-1" />
-                    {product.distance ? `${product.distance} km away` : "Location unknown"}
+                    {product.farmer_id || "Unknown location"}
                   </CardDescription>
                 </CardHeader>
                 

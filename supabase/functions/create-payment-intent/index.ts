@@ -1,14 +1,11 @@
 
-// Follow this setup guide to integrate the Deno runtime and Stripe:
-// https://stripe.com/docs/payments/quickstart
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import Stripe from "https://esm.sh/stripe@14.21.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type"
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
@@ -18,70 +15,74 @@ serve(async (req) => {
   }
 
   try {
-    // Ensure STRIPE_SECRET_KEY is set in environment variables
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) {
-      console.log("Missing STRIPE_SECRET_KEY");
-      throw new Error("STRIPE_SECRET_KEY is not set in environment variables");
-    }
-    
-    // Initialize Stripe
-    const stripe = new Stripe(stripeKey, {
-      apiVersion: "2023-10-16",
-      httpClient: Stripe.createFetchHttpClient(),
-    });
+    const body = await req.json();
+    const { amount, productId, productName, paymentMethod } = body;
 
-    // Get request body
-    const { amount, productId, productName, paymentMethod } = await req.json();
-    
-    if (!amount || amount < 1) {
-      throw new Error("Invalid amount provided");
+    // Get the auth header
+    const authorization = req.headers.get('Authorization');
+    if (!authorization) {
+      return new Response(JSON.stringify({ error: 'No authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-    
-    console.log(`Creating payment intent: ${amount} INR for product ${productId}, method: ${paymentMethod}`);
-    
-    // Create Supabase client using anon key (for read operations)
-    const supabaseClient = createClient(
+
+    // Extract the token
+    const token = authorization.split(' ')[1];
+
+    // Create a Supabase client
+    const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false }
+      }
     );
 
-    // Get authenticated user
-    const authHeader = req.headers.get("Authorization")!;
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
-    
+    // Get the user
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
-      console.log("User not authenticated", userError);
-      throw new Error("User not authenticated");
+      return new Response(JSON.stringify({ error: 'Invalid user token' }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Create a PaymentIntent
+    // Initialize Stripe
+    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+      apiVersion: "2023-10-16",
+    });
+
+    // Create payment intent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
+      amount: amount * 100, // convert to cents
       currency: "inr",
-      payment_method_types: ["card"],
       metadata: {
-        product_id: productId,
-        user_id: user.id,
-        product_name: productName || "Unknown product"
+        userId: user.id,
+        productId,
+        productName,
+        paymentMethod
       },
-      receipt_email: user.email,
     });
 
-    console.log(`Payment intent created: ${paymentIntent.id}`);
-
-    return new Response(JSON.stringify({ 
-      clientSecret: paymentIntent.client_secret 
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    // Return the client secret
+    return new Response(
+      JSON.stringify({ clientSecret: paymentIntent.client_secret }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+    
   } catch (error) {
-    console.error("Error creating payment intent:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    console.error('Error in create-payment-intent:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 });

@@ -115,7 +115,7 @@ const BidForm = ({ product, onBidSuccess, currentHighestBid, isWinner }: BidForm
           </div>
           
           <Link to={`/buyer/payment-details?product=${product.id}`} className="w-full">
-            <Button className="w-full">Complete Purchase</Button>
+            <Button className="w-full bg-green-600 hover:bg-green-700">Complete Purchase</Button>
           </Link>
         </CardContent>
       </Card>

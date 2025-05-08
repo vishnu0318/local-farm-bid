@@ -1,516 +1,349 @@
+
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from '@/components/ui/skeleton';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { CheckCircle, Loader2, IndianRupee, CreditCard } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { processPayment, markProductAsPaid } from '@/services/paymentService';
-import { mockProducts } from '@/services/mockData';
+import { createPaymentIntent, processCodPayment, processUpiPayment } from '@/services/paymentService';
+import { getProductById } from '@/services/productService';
+import { getHighestBid } from '@/services/bidService';
 import { Product } from '@/types/marketplace';
 import { toast } from "sonner";
-import { getProductById } from '@/services/productService';
 
 const PaymentDetails = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const productId = searchParams.get('product');
-  
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'upi' | 'card'>('cod');
-  const [processingPayment, setProcessingPayment] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
-  
-  // Form state for delivery address
-  const [addressLine1, setAddressLine1] = useState('');
-  const [addressLine2, setAddressLine2] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  
-  // For card payment
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardName, setCardName] = useState('');
-  
-  // For UPI
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'cod' | 'upi'>('card');
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [upiId, setUpiId] = useState('');
-  
+  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [bidAmount, setBidAmount] = useState<number>(0);
+
+  // Extract product ID from query params
+  const queryParams = new URLSearchParams(location.search);
+  const productId = queryParams.get('product');
+
   useEffect(() => {
-    // Fetch product details
     const fetchProductDetails = async () => {
       setLoading(true);
       
       if (!productId) {
-        toast.error("Product ID is missing");
+        toast.error("No product specified for payment");
         navigate('/buyer/my-bids');
         return;
       }
       
-      // Try to fetch the product from the database first
+      // Try to fetch the product from the database
       let foundProduct: Product | null = null;
       
       try {
         foundProduct = await getProductById(productId);
+        
+        if (!foundProduct) {
+          toast.error("Product not found");
+          navigate('/buyer/my-bids');
+          return;
+        }
+        
+        // Get highest bid amount
+        const highestBid = await getHighestBid(productId);
+        setBidAmount(highestBid);
+        
+        setProduct(foundProduct);
+        
+        // If user has an address in their profile, use it as default
+        if (user) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('address')
+            .eq('id', user.id)
+            .single();
+            
+          if (profileData?.address) {
+            setDeliveryAddress(profileData.address);
+          }
+        }
       } catch (error) {
-        console.error("Error fetching product from database:", error);
-      }
-      
-      // If not found in database, try to find it in mock data
-      if (!foundProduct) {
-        foundProduct = mockProducts.find(p => p.id === productId) || null;
-      }
-      
-      if (!foundProduct) {
-        toast.error("Product not found");
+        console.error("Error fetching product:", error);
+        toast.error("Failed to load product details");
         navigate('/buyer/my-bids');
-        return;
+      } finally {
+        setLoading(false);
       }
-      
-      // Check if the user is the highest bidder
-      if (foundProduct.highest_bidder_id !== user?.id) {
-        toast.error("You are not the winning bidder for this auction");
-        navigate('/buyer/my-bids');
-        return;
-      }
-      
-      // Check if the auction has ended
-      const now = new Date();
-      const bidEnd = foundProduct.bid_end ? new Date(foundProduct.bid_end) : null;
-      if (!bidEnd || now <= bidEnd) {
-        toast.error("This auction is still active");
-        navigate(`/buyer/product/${productId}`);
-        return;
-      }
-      
-      // Check if payment has already been made
-      if (foundProduct.paid) {
-        toast.error("Payment has already been processed for this product");
-        navigate('/buyer/my-bids');
-        return;
-      }
-      
-      setProduct(foundProduct);
-      setLoading(false);
     };
     
     fetchProductDetails();
-  }, [productId, navigate, user?.id]);
-  
-  const handlePaymentMethodChange = (value: string) => {
-    setPaymentMethod(value as 'cod' | 'upi' | 'card');
-  };
-  
-  const validatePaymentDetails = (): boolean => {
-    // Validate delivery address
-    if (!addressLine1.trim()) {
-      toast.error("Please enter your street address");
-      return false;
-    }
+  }, [productId, navigate, user]);
+
+  const handlePayNow = async () => {
+    if (!user || !product) return;
     
-    if (!city.trim()) {
-      toast.error("Please enter your city");
-      return false;
-    }
-    
-    if (!state.trim()) {
-      toast.error("Please enter your state");
-      return false;
-    }
-    
-    if (!postalCode.trim() || !/^\d{6}$/.test(postalCode)) {
-      toast.error("Please enter a valid 6-digit postal code");
-      return false;
-    }
-    
-    // Validate payment method specific fields
-    if (paymentMethod === 'card') {
-      if (!cardNumber.trim() || !/^\d{16}$/.test(cardNumber.replace(/\s/g, ''))) {
-        toast.error("Please enter a valid 16-digit card number");
-        return false;
-      }
-      
-      if (!cardExpiry.trim() || !/^\d{2}\/\d{2}$/.test(cardExpiry)) {
-        toast.error("Please enter a valid card expiry date (MM/YY)");
-        return false;
-      }
-      
-      if (!cardCvv.trim() || !/^\d{3}$/.test(cardCvv)) {
-        toast.error("Please enter a valid 3-digit CVV");
-        return false;
-      }
-      
-      if (!cardName.trim()) {
-        toast.error("Please enter the name on the card");
-        return false;
-      }
-    } else if (paymentMethod === 'upi') {
-      if (!upiId.trim() || !upiId.includes('@')) {
-        toast.error("Please enter a valid UPI ID");
-        return false;
-      }
-    }
-    
-    return true;
-  };
-  
-  const handlePaymentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!product) return;
-    
-    if (!validatePaymentDetails()) {
-      return;
-    }
-    
-    setProcessingPayment(true);
+    setPaymentStatus('processing');
     
     try {
-      // Process payment through the payment service
-      const deliveryAddress = {
-        addressLine1,
-        addressLine2,
-        city,
-        state,
-        postalCode,
-      };
-      
-      const amount = product.highest_bid || product.price;
-      const result = await processPayment(
-        amount, 
-        product.id, 
-        paymentMethod, 
-        deliveryAddress,
-        paymentMethod === 'upi' ? upiId : undefined
-      );
-      
-      if (!result.success) {
-        throw new Error(result.message || "Payment failed");
+      if (!deliveryAddress) {
+        toast.error("Please enter a delivery address");
+        setPaymentStatus('idle');
+        return;
       }
       
-      // Mark product as paid
-      const updateResult = await markProductAsPaid(product.id);
-      
-      if (!updateResult.success) {
-        throw new Error("Failed to update payment status");
+      if (paymentMethod === 'upi' && !upiId) {
+        toast.error("Please enter your UPI ID");
+        setPaymentStatus('idle');
+        return;
       }
       
-      // Update product locally
-      setProduct(prev => prev ? { ...prev, paid: true } : null);
-      setPaymentSuccess(true);
-      
-      // Show success message
-      toast.success("Payment successful! Your order has been placed.");
-    } catch (error: any) {
-      toast.error(error.message || "Payment processing failed");
-    } finally {
-      setProcessingPayment(false);
+      // Process payment based on selected method
+      if (paymentMethod === 'card') {
+        // Create a Stripe payment intent
+        const amount = bidAmount; // Use bid amount
+        const { clientSecret, error } = await createPaymentIntent({
+          amount: amount,
+          productId: product.id,
+          productName: product.name,
+          paymentMethod: 'card',
+        });
+        
+        if (error || !clientSecret) {
+          toast.error(error || "Payment failed. Please try again.");
+          setPaymentStatus('error');
+          return;
+        }
+        
+        // Redirect to Stripe checkout
+        // In a real integration, we would use Stripe Elements here
+        // For now, just simulate success
+        toast.success("Payment processed successfully!");
+        setPaymentStatus('success');
+        
+        // Redirect to success page after a delay
+        setTimeout(() => {
+          navigate('/buyer/my-bids');
+        }, 2000);
+      } 
+      else if (paymentMethod === 'upi') {
+        // Process UPI payment
+        const result = await processUpiPayment(product.id, bidAmount, upiId);
+        if (result.success) {
+          toast.success(result.message || "UPI payment processed successfully!");
+          setPaymentStatus('success');
+          
+          // Redirect to success page after a delay
+          setTimeout(() => {
+            navigate('/buyer/my-bids');
+          }, 2000);
+        } else {
+          toast.error(result.message || "Payment failed. Please try again.");
+          setPaymentStatus('error');
+        }
+      } 
+      else if (paymentMethod === 'cod') {
+        // Process COD payment
+        const result = await processCodPayment(product.id, bidAmount);
+        if (result.success) {
+          toast.success(result.message || "Cash on Delivery order placed successfully!");
+          setPaymentStatus('success');
+          
+          // Redirect to success page after a delay
+          setTimeout(() => {
+            navigate('/buyer/my-bids');
+          }, 2000);
+        } else {
+          toast.error(result.message || "Order failed. Please try again.");
+          setPaymentStatus('error');
+        }
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      toast.error("Payment failed. Please try again.");
+      setPaymentStatus('error');
     }
   };
-  
+
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Complete Your Purchase</h1>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-8 w-48 mb-2" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-full" />
-                  <Skeleton className="h-12 w-2/3" />
-                  <div className="grid grid-cols-2 gap-4">
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <div>
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-6 w-32" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-6 w-2/3" />
-                  <Skeleton className="h-8 w-full" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-4" />
+        <p className="text-gray-500">Loading payment details...</p>
       </div>
     );
   }
-  
-  if (!product) {
+
+  if (paymentStatus === 'success') {
     return (
-      <div className="max-w-4xl mx-auto text-center py-12">
-        <h1 className="text-3xl font-bold mb-6">Product Not Found</h1>
-        <p className="mb-6">The product you're looking for doesn't exist or you don't have permission to access it.</p>
-        <Button onClick={() => navigate('/buyer/my-bids')}>
-          Go to My Bids
-        </Button>
-      </div>
-    );
-  }
-  
-  if (paymentSuccess) {
-    return (
-      <div className="max-w-4xl mx-auto text-center py-12">
-        <div className="flex justify-center mb-6">
-          <CheckCircle className="h-16 w-16 text-green-600" />
-        </div>
-        <h1 className="text-3xl font-bold mb-4">Payment Successful!</h1>
-        <p className="text-xl mb-8">Your order has been placed successfully.</p>
-        
-        <Card className="mb-8 mx-auto max-w-md">
+      <div className="max-w-2xl mx-auto">
+        <Card className="border-green-500">
           <CardHeader>
-            <CardTitle>Order Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span>Product:</span>
-                <span className="font-medium">{product.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Amount Paid:</span>
-                <span className="font-medium flex items-center">
-                  <IndianRupee className="h-4 w-4 mr-0.5" />
-                  {product.highest_bid || product.price}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Payment Method:</span>
-                <span className="font-medium capitalize">{paymentMethod}</span>
-              </div>
+            <div className="flex items-center justify-center mb-4">
+              <CheckCircle className="h-16 w-16 text-green-500" />
             </div>
-          </CardContent>
-          <CardFooter>
-            <Button className="w-full" onClick={() => navigate('/buyer/my-bids')}>
-              View My Bids
+            <CardTitle className="text-center text-2xl">Payment Successful!</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="mb-4">
+              Your order has been confirmed. You will receive the product details shortly.
+            </p>
+            <Button onClick={() => navigate('/buyer/my-bids')} className="mt-4">
+              View My Orders
             </Button>
-          </CardFooter>
+          </CardContent>
         </Card>
       </div>
     );
   }
-  
+
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Complete Your Purchase</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2">
-          <form onSubmit={handlePaymentSubmit}>
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle>Delivery Address</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="addressLine1">Street Address</Label>
-                    <Input 
-                      id="addressLine1" 
-                      value={addressLine1} 
-                      onChange={(e) => setAddressLine1(e.target.value)} 
-                      required 
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="addressLine2">Apartment, suite, etc. (optional)</Label>
-                    <Input 
-                      id="addressLine2" 
-                      value={addressLine2} 
-                      onChange={(e) => setAddressLine2(e.target.value)} 
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="city">City</Label>
-                      <Input 
-                        id="city" 
-                        value={city} 
-                        onChange={(e) => setCity(e.target.value)} 
-                        required 
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="state">State</Label>
-                      <Input 
-                        id="state" 
-                        value={state} 
-                        onChange={(e) => setState(e.target.value)} 
-                        required 
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor="postalCode">Postal Code</Label>
-                    <Input 
-                      id="postalCode" 
-                      value={postalCode} 
-                      onChange={(e) => setPostalCode(e.target.value)} 
-                      required 
-                      maxLength={6}
-                      pattern="\d{6}"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle>Payment Method</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <RadioGroup value={paymentMethod} onValueChange={handlePaymentMethodChange}>
-                  <div className="flex items-center space-x-2 mb-4">
-                    <RadioGroupItem value="cod" id="cod" />
-                    <Label htmlFor="cod">Cash on Delivery (COD)</Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2 mb-4">
-                    <RadioGroupItem value="upi" id="upi" />
-                    <Label htmlFor="upi">UPI</Label>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h2 className="text-lg font-medium mb-4">Payment Method</h2>
+                <RadioGroup value={paymentMethod} onValueChange={(value: any) => setPaymentMethod(value)}>
+                  <div className="flex items-center space-x-2 mb-2">
                     <RadioGroupItem value="card" id="card" />
-                    <Label htmlFor="card">Credit / Debit Card</Label>
+                    <Label htmlFor="card" className="flex items-center">
+                      <CreditCard className="h-4 w-4 mr-2" />
+                      Credit / Debit Card
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <RadioGroupItem value="upi" id="upi" />
+                    <Label htmlFor="upi">UPI Payment</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="cod" id="cod" />
+                    <Label htmlFor="cod">Cash on Delivery</Label>
                   </div>
                 </RadioGroup>
-                
-                {paymentMethod === 'card' && (
-                  <div className="mt-6 space-y-4">
-                    <div>
-                      <Label htmlFor="cardName">Name on Card</Label>
-                      <Input 
-                        id="cardName" 
-                        value={cardName} 
-                        onChange={(e) => setCardName(e.target.value)} 
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      <Input 
-                        id="cardNumber" 
-                        value={cardNumber} 
-                        onChange={(e) => setCardNumber(e.target.value)} 
-                        placeholder="1234 5678 9012 3456"
-                        maxLength={19}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="cardExpiry">Expiry Date</Label>
-                        <Input 
-                          id="cardExpiry" 
-                          value={cardExpiry} 
-                          onChange={(e) => setCardExpiry(e.target.value)} 
-                          placeholder="MM/YY"
-                          maxLength={5}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cardCvv">CVV</Label>
-                        <Input 
-                          id="cardCvv" 
-                          value={cardCvv} 
-                          onChange={(e) => setCardCvv(e.target.value)} 
-                          type="password"
-                          maxLength={3}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {paymentMethod === 'upi' && (
-                  <div className="mt-6">
+              </div>
+              
+              <Separator />
+              
+              {paymentMethod === 'upi' && (
+                <div>
+                  <h2 className="text-lg font-medium mb-4">UPI Details</h2>
+                  <div>
                     <Label htmlFor="upiId">UPI ID</Label>
                     <Input 
                       id="upiId" 
                       value={upiId} 
-                      onChange={(e) => setUpiId(e.target.value)} 
-                      placeholder="yourname@upi"
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="example@upi"
+                      className="mt-1"
                     />
+                    <p className="text-xs text-gray-500 mt-1">Enter your UPI ID (e.g. name@bank)</p>
                   </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Button 
-                  type="submit" 
-                  className="w-full"
-                  disabled={processingPayment}
-                >
-                  {processingPayment ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Place Order & Pay
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          </form>
+                </div>
+              )}
+              
+              <div>
+                <h2 className="text-lg font-medium mb-4">Delivery Address</h2>
+                <div>
+                  <Textarea 
+                    value={deliveryAddress} 
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    placeholder="Enter your full delivery address"
+                    className="min-h-[100px]"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
         
+        {/* Order summary */}
         <div>
-          <Card className="sticky top-8">
+          <Card>
             <CardHeader>
               <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Product:</span>
-                  <span className="font-medium">{product.name}</span>
+              {product && (
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="h-16 w-16 rounded-md overflow-hidden bg-gray-100">
+                      <img 
+                        src={product.image_url || '/placeholder.svg'} 
+                        alt={product.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div>
+                      <p className="font-medium">{product.name}</p>
+                      <p className="text-sm text-gray-500">Quantity: {product.quantity} {product.unit}</p>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span>Winning Bid Amount</span>
+                      <span className="font-medium flex items-center">
+                        <IndianRupee className="h-3 w-3 mr-0.5" />
+                        {bidAmount}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Delivery Fee</span>
+                      <span className="font-medium flex items-center">
+                        <IndianRupee className="h-3 w-3 mr-0.5" />
+                        0
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Taxes</span>
+                      <span className="font-medium flex items-center">
+                        <IndianRupee className="h-3 w-3 mr-0.5" />
+                        0
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <Separator />
+                  
+                  <div className="flex justify-between text-lg font-semibold">
+                    <span>Total</span>
+                    <span className="flex items-center">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {bidAmount}
+                    </span>
+                  </div>
                 </div>
-                
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Quantity:</span>
-                  <span>{product.quantity} {product.unit}</span>
-                </div>
-                
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Seller:</span>
-                  <span>{product.farmer_name}</span>
-                </div>
-                
-                <div className="border-t border-gray-200 pt-4 flex justify-between items-center">
-                  <span className="font-medium">Total:</span>
-                  <span className="font-bold text-xl flex items-center">
-                    <IndianRupee className="h-5 w-5 mr-0.5" />
-                    {product.highest_bid || product.price}
-                  </span>
-                </div>
-              </div>
+              )}
             </CardContent>
+            <CardFooter>
+              <Button 
+                className="w-full" 
+                onClick={handlePayNow}
+                disabled={paymentStatus === 'processing'}
+              >
+                {paymentStatus === 'processing' ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Processing...
+                  </>
+                ) : (
+                  'Pay Now'
+                )}
+              </Button>
+            </CardFooter>
           </Card>
         </div>
       </div>

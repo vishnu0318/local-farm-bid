@@ -20,18 +20,18 @@ export const placeBid = async (
       .single();
     
     if (productError) {
-      console.log('Product not found in DB, using mock data');
-      // In demo mode, we'll just proceed even if product isn't in DB
-    } else if (product) {
-      // Check if bid end date has passed
-      if (product.bid_end && new Date() > new Date(product.bid_end)) {
-        return { success: false, error: 'This auction has already ended' };
-      }
-      
-      // Check if bid start date is in the future
-      if (product.bid_start && new Date() < new Date(product.bid_start)) {
-        return { success: false, error: 'This auction has not started yet' };
-      }
+      console.log('Product not found in DB');
+      return { success: false, error: 'Product not found' };
+    }
+    
+    // Check if bid end date has passed
+    if (product.bid_end && new Date() > new Date(product.bid_end)) {
+      return { success: false, error: 'This auction has already ended' };
+    }
+    
+    // Check if bid start date is in the future
+    if (product.bid_start && new Date() < new Date(product.bid_start)) {
+      return { success: false, error: 'This auction has not started yet' };
     }
     
     // Get current highest bid
@@ -48,14 +48,7 @@ export const placeBid = async (
     
     if (bidError) {
       console.log('No existing bids found for this product');
-      // If no bids exist, use product price from product or default to 100
-      const { data: productData } = await supabase
-        .from('products')
-        .select('price')
-        .eq('id', productId)
-        .single();
-      
-      minBid = (productData?.price || 100) + 1;
+      minBid = product.price + 1;
     } else {
       minBid = highestBidData.amount + 1;
     }
@@ -208,7 +201,10 @@ export const getUserBidsWithProducts = async (userId: string): Promise<Bid[]> =>
   try {
     const { data, error } = await supabase
       .from('bids')
-      .select('*')
+      .select(`
+        *,
+        product:product_id (*)
+      `)
       .eq('bidder_id', userId)
       .order('created_at', { ascending: false });
     
@@ -217,27 +213,7 @@ export const getUserBidsWithProducts = async (userId: string): Promise<Bid[]> =>
       return [];
     }
     
-    // Get product details for each bid
-    const enrichedBids = await Promise.all(data.map(async (bid) => {
-      const { data: productData, error: productError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('id', bid.product_id)
-        .single();
-      
-      if (productError) {
-        console.error('Error fetching product details:', productError);
-        return null;
-      }
-      
-      return {
-        ...bid,
-        product: productData
-      };
-    }));
-    
-    // Filter out null values
-    return enrichedBids.filter(Boolean) as Bid[];
+    return data as Bid[];
   } catch (error) {
     console.error('Error fetching user bids with products:', error);
     return [];

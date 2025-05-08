@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { Loader2, MapPin, IndianRupee, Timer } from 'lucide-react';
 import { formatDistance, format, isAfter, isBefore } from 'date-fns';
 import { Product, FarmerProfile, Bid } from '@/types/marketplace';
-import { getProductBids } from '@/services/bidService';
+import { getProductBids, subscribeToBidChanges } from '@/services/bidService';
 
 const ProductDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -107,7 +107,32 @@ const ProductDetail = () => {
       }
     }, 1000);
     
-    return () => clearInterval(timer);
+    // Set up real-time subscription to bids
+    let channel: any;
+    if (id) {
+      channel = subscribeToBidChanges(id, async () => {
+        console.log("Received new bid for product", id);
+        const refreshedBids = await getProductBids(id);
+        setBids(refreshedBids);
+        
+        // Update highest bid status
+        if (refreshedBids.length > 0) {
+          const maxBid = refreshedBids[0]; // Assuming bids are sorted by amount desc
+          setHighestBid(maxBid.amount);
+          
+          if (user && maxBid.bidder_id === user.id) {
+            setIsUserHighestBidder(true);
+          } else {
+            setIsUserHighestBidder(false);
+          }
+        }
+      });
+    }
+    
+    return () => {
+      clearInterval(timer);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [id, user]);
   
   // Function to handle successful bid placement

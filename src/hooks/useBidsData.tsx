@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Bid } from '@/types/marketplace';
 import { formatDistance } from 'date-fns';
-import { mockProducts } from '@/services/mockData';
+import { getUserBidsWithProducts } from '@/services/bidService';
+import { supabase } from '@/integrations/supabase/client';
 
 export type BidStatus = {
   status: 'winning' | 'outbid' | 'won' | 'lost';
@@ -25,33 +26,36 @@ export const useBidsData = () => {
       setIsLoading(true);
       
       try {
-        // Create mock bids data based on the mock products
-        // In a real implementation, we would fetch from Supabase
-        const mockBids: Bid[] = mockProducts
-          .filter(product => Math.random() > 0.3) // Randomly select some products to have bids on
-          .map(product => {
-            // For products where user is highest bidder
-            const isHighestBidder = product.highest_bidder_id === "current_user_id" || product.highest_bidder_id === user.id;
-            const bidAmount = isHighestBidder ? product.highest_bid || product.price : Math.floor((product.highest_bid || product.price) * 0.9);
-            
-            return {
-              id: `bid-${product.id}`,
-              product_id: product.id,
-              bidder_id: user.id,
-              bidder_name: user.user_metadata?.name || user.email?.split('@')[0] || 'Anonymous',
-              amount: bidAmount,
-              created_at: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString(), // Random date in the last week
-              product: {
-                ...product,
-                highest_bidder_id: isHighestBidder ? user.id : `other-bidder-${Math.floor(Math.random() * 1000)}`
-              }
-            };
-          });
+        // Fetch actual bids from the database
+        const userBids = await getUserBidsWithProducts(user.id);
         
-        setTimeout(() => {
-          setBids(mockBids);
-          setIsLoading(false);
-        }, 800); // Simulate loading delay
+        if (userBids.length > 0) {
+          // For each bid, check if user is still the highest bidder
+          const enrichedBids = await Promise.all(userBids.map(async (bid) => {
+            const { data: highestBid } = await supabase
+              .from('bids')
+              .select('bidder_id, amount')
+              .eq('product_id', bid.product_id)
+              .order('amount', { ascending: false })
+              .limit(1)
+              .single();
+              
+            const isHighestBidder = highestBid && highestBid.bidder_id === user.id;
+            
+            // Add the highest_bidder_id property to the product
+            if (bid.product) {
+              bid.product.highest_bidder_id = isHighestBidder ? user.id : (highestBid?.bidder_id || '');
+            }
+            
+            return bid;
+          }));
+          
+          setBids(enrichedBids);
+        } else {
+          setBids([]);
+        }
+        
+        setIsLoading(false);
       } catch (error) {
         console.error('Error fetching bids:', error);
         setIsLoading(false);
@@ -60,7 +64,24 @@ export const useBidsData = () => {
     
     fetchMyBids();
     
-    // Set up interval to refresh bids status
+    // Set up a channel to listen for new bids
+    const channel = supabase
+      .channel('public:bids')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'bids',
+          filter: `bidder_id=eq.${user?.id}`
+        }, 
+        () => {
+          // Refresh data when there's a change to the user's bids
+          fetchMyBids();
+        }
+      )
+      .subscribe();
+    
+    // Refresh bids status periodically
     const intervalId = setInterval(() => {
       setBids(prevBids => prevBids.map(bid => {
         if (!bid.product) return bid;
@@ -87,7 +108,10 @@ export const useBidsData = () => {
       }));
     }, 60000); // Refresh every minute
     
-    return () => clearInterval(intervalId);
+    return () => {
+      clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   // Determine bid status
