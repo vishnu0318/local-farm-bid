@@ -12,6 +12,13 @@ import { useAuth } from '@/context/AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
 import { IndianRupee, CreditCard, Wallet, Banknote } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { Product } from '@/types/marketplace';
+
+// Define a type that extends Product to include winningBid property
+interface ProductWithWinningBid extends Product {
+  winningBid?: number;
+  bids?: { amount: number; bidder_id: string }[];
+}
 
 // Initialize Stripe
 const stripePromise = loadStripe("pk_test_51OLPCESIYS9RARqbGN1mSEVAD4Dc2njuu5riGLFQPxV1qVjJ9SeBBAAzwkZLEjtEr3HpivbvLfWLQFtibQyMvTWq00ZC7FZu82");
@@ -23,7 +30,7 @@ const PaymentDetails = () => {
   const queryParams = new URLSearchParams(location.search);
   const productId = queryParams.get('product');
 
-  const [product, setProduct] = useState<any>(null);
+  const [product, setProduct] = useState<ProductWithWinningBid | null>(null);
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [processing, setProcessing] = useState(false);
@@ -62,15 +69,16 @@ const PaymentDetails = () => {
             return;
           }
           
-          // Set the winning bid amount
-          productData.winningBid = highestBid.amount;
+          // Set the product with winning bid amount using spread operator
+          setProduct({
+            ...productData,
+            winningBid: highestBid.amount
+          });
         } else {
           toast.error("No bids found for this product");
           navigate('/buyer/my-bids');
           return;
         }
-        
-        setProduct(productData);
       } catch (error) {
         console.error("Error fetching product:", error);
         toast.error("Failed to load product details");
@@ -90,6 +98,10 @@ const PaymentDetails = () => {
     try {
       // Get the payment amount from the winning bid
       const amount = product.winningBid;
+      
+      if (!amount) {
+        throw new Error('Invalid bid amount');
+      }
       
       if (paymentMethod === 'card') {
         // Create a Stripe payment intent

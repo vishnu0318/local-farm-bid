@@ -34,7 +34,10 @@ const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
     fetchBids();
 
     // Subscribe to real-time bid updates
-    const channel = subscribeToBidChanges(productId, fetchBids);
+    const channel = subscribeToBidChanges(productId, () => {
+      // When a new bid is placed, refresh the bid history
+      fetchBids();
+    });
     
     return () => {
       supabase.removeChannel(channel);

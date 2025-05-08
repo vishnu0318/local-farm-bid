@@ -36,7 +36,10 @@ const ProductBidCounter: React.FC<ProductBidCounterProps> = ({ productId }) => {
     fetchData();
 
     // Subscribe to real-time bid updates
-    const channel = subscribeToBidChanges(productId, fetchData);
+    const channel = subscribeToBidChanges(productId, () => {
+      // When a new bid comes in, refresh the bid count and highest bid
+      fetchData();
+    });
     
     return () => {
       supabase.removeChannel(channel);
