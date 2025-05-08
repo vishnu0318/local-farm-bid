@@ -45,25 +45,23 @@ export const createPaymentIntent = async (
 };
 
 /**
- * Records a completed payment in the database
+ * Records a completed payment in the database by updating the product
  */
 export const recordPayment = async (
   productId: string,
-  bidId: string,
   amount: number,
   paymentMethod: string,
   status: 'completed' | 'pending' | 'failed' = 'completed'
 ) => {
   try {
+    // Instead of inserting into a payments table, we'll update the product status
     const { data, error } = await supabase
-      .from('payments')
-      .insert({
-        product_id: productId,
-        bid_id: bidId,
-        amount: amount,
-        payment_method: paymentMethod,
-        status: status
-      });
+      .from('products')
+      .update({
+        paid: status === 'completed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', productId);
 
     if (error) throw error;
     
@@ -79,14 +77,12 @@ export const recordPayment = async (
  */
 export const processCodPayment = async (
   productId: string,
-  bidId: string,
   amount: number
 ) => {
   try {
     // For COD, we just record the payment as pending
     const result = await recordPayment(
       productId,
-      bidId,
       amount,
       'cod',
       'pending'
@@ -109,7 +105,6 @@ export const processCodPayment = async (
  */
 export const processUpiPayment = async (
   productId: string,
-  bidId: string,
   amount: number,
   upiId: string
 ) => {
@@ -119,7 +114,6 @@ export const processUpiPayment = async (
     // Record the payment
     const result = await recordPayment(
       productId,
-      bidId,
       amount,
       'upi',
       'completed'
@@ -134,5 +128,67 @@ export const processUpiPayment = async (
   } catch (error: any) {
     console.error('Error processing UPI payment:', error);
     return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Process payment using the appropriate method
+ */
+export const processPayment = async (
+  amount: number,
+  productId: string,
+  paymentMethod: 'cod' | 'upi' | 'card',
+  deliveryAddress: any,
+  upiId?: string
+) => {
+  try {
+    let result;
+    
+    switch (paymentMethod) {
+      case 'cod':
+        result = await processCodPayment(productId, amount);
+        break;
+      case 'upi':
+        if (!upiId) {
+          return { success: false, message: 'UPI ID is required for UPI payments' };
+        }
+        result = await processUpiPayment(productId, amount, upiId);
+        break;
+      case 'card':
+        // For demo purposes, we'll simulate a successful card payment
+        result = await recordPayment(productId, amount, 'card', 'completed');
+        return { 
+          success: result.success, 
+          message: result.success ? 
+            'Card payment processed successfully' : 
+            'Failed to process card payment' 
+        };
+      default:
+        return { success: false, message: 'Invalid payment method' };
+    }
+    
+    return result;
+  } catch (error: any) {
+    console.error('Error processing payment:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Mark a product as paid in the database
+ */
+export const markProductAsPaid = async (productId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({ paid: true })
+      .eq('id', productId);
+    
+    if (error) throw error;
+    
+    return { success: true, data };
+  } catch (error: any) {
+    console.error('Error marking product as paid:', error);
+    return { success: false, error: error.message };
   }
 };

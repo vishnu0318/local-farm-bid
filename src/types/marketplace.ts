@@ -1,4 +1,3 @@
-
 export interface Product {
   id: string;
   name: string;
@@ -18,7 +17,7 @@ export interface Product {
   bids_count?: number;
   timeLeft?: string;
   available?: boolean;
-  paid?: boolean; // To track payment status
+  paid?: boolean; // Added property to track payment status
 }
 
 export interface Bid {

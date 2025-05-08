@@ -172,7 +172,13 @@ const PaymentDetails = () => {
       };
       
       const amount = product.highest_bid || product.price;
-      const result = await processPayment(amount, product.id, paymentMethod, deliveryAddress);
+      const result = await processPayment(
+        amount, 
+        product.id, 
+        paymentMethod, 
+        deliveryAddress,
+        paymentMethod === 'upi' ? upiId : undefined
+      );
       
       if (!result.success) {
         throw new Error(result.message || "Payment failed");
