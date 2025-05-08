@@ -144,6 +144,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     
     setCrops(prevCrops => [...prevCrops, newCrop]);
   };
+  console.log(crops)
+  
 
   const placeBid = (cropId: string, bidderId: string, bidderName: string, amount: number) => {
     // Create new bid
@@ -172,6 +174,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       )
     );
   };
+
+ 
 
   return (
     <DataContext.Provider value={{

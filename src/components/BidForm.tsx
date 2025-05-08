@@ -1,79 +1,78 @@
-
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Crop, useData } from '@/context/DataContext';
+import { useData } from '@/context/DataContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { toast } from "sonner";
+import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { IndianRupee } from 'lucide-react';
+import { Product } from '@/services/productService';
 
 interface BidFormProps {
-  crop: Crop;
+  crop: Product;
 }
 
 const BidForm = ({ crop }: BidFormProps) => {
   const { user, isBuyer } = useAuth();
   const { placeBid } = useData();
-  const [bidAmount, setBidAmount] = useState<number>(crop.currentBid > 0 ? crop.currentBid + 5 : crop.basePrice + 5);
+  const [bidAmount, setBidAmount] = useState<number>(() => {
+    return crop.currentBid ? crop.currentBid + 5 : crop.price + 5;
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Check if bidding period has ended
+
   const isBiddingEnded = () => {
     const now = new Date();
-    const endTime = new Date(crop.endTime);
+    const endTimeStr = crop?.bid_end ?? null;
+    if (!endTimeStr) return false;
+    const endTime = new Date(endTimeStr);
     return now > endTime;
   };
-  
+
   const handleBidSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) {
-      toast.error("Please log in to place a bid");
+      toast.error('Please log in to place a bid');
       return;
     }
-    
+
     if (!isBuyer()) {
-      toast.error("Only buyers can place bids");
+      toast.error('Only buyers can place bids');
       return;
     }
-    
+
     if (isBiddingEnded()) {
-      toast.error("This auction has ended");
+      toast.error('This auction has ended');
       return;
     }
-    
-    if (bidAmount <= crop.currentBid) {
+
+    if (bidAmount <= (crop.currentBid || 0)) {
       toast.error(`Your bid must be higher than the current bid (₹${crop.currentBid})`);
       return;
     }
-    
-    if (bidAmount <= crop.basePrice) {
-      toast.error(`Your bid must be higher than the base price (₹${crop.basePrice})`);
+
+    if (bidAmount <= crop.price) {
+      toast.error(`Your bid must be higher than the base price (₹${crop.price})`);
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
       placeBid(crop.id, user.id, user.name, bidAmount);
-      toast.success("Your bid has been placed successfully!");
-      
-      // Reset bid amount to new minimum
+      toast.success('Your bid has been placed successfully!');
       setBidAmount(bidAmount + 5);
     } catch (error) {
-      toast.error("Failed to place bid. Please try again.");
+      toast.error('Failed to place bid. Please try again.');
       console.error(error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // If bidding has ended, show a message
   if (isBiddingEnded()) {
     return (
       <Card className="p-4 text-center">
@@ -90,7 +89,6 @@ const BidForm = ({ crop }: BidFormProps) => {
     );
   }
 
-  // If user is a farmer, show a message instead of the bid form
   if (user?.role === 'farmer') {
     return (
       <Card className="p-4 text-center">
@@ -106,8 +104,7 @@ const BidForm = ({ crop }: BidFormProps) => {
       </Card>
     );
   }
-  
-  // If not logged in, show login prompt
+
   if (!user) {
     return (
       <Card className="p-4 text-center">
@@ -116,29 +113,29 @@ const BidForm = ({ crop }: BidFormProps) => {
           Please log in as a buyer to place bids on crops.
         </p>
         <Link to="/login?role=buyer">
-          <Button className="w-full">
-            Login to Bid
-          </Button>
+          <Button className="w-full">Login to Bid</Button>
         </Link>
       </Card>
     );
   }
-  
+
   return (
     <Card className="p-4">
       <h3 className="font-semibold text-lg mb-2">Place Your Bid</h3>
-      
+
       <div className="mb-4">
         <p className="text-sm text-gray-600">Current Highest Bid</p>
         <div className="flex items-center">
           <IndianRupee className="h-4 w-4 mr-0.5 text-green-600" />
-          <p className="text-xl font-bold text-green-600">{crop.currentBid || crop.basePrice}</p>
+          <p className="text-xl font-bold text-green-600">
+            {crop.currentBid || crop.price}
+          </p>
         </div>
         {crop.highestBidderName && (
           <p className="text-sm text-gray-500">by {crop.highestBidderName}</p>
         )}
       </div>
-      
+
       <form onSubmit={handleBidSubmit}>
         <div className="mb-4">
           <label htmlFor="bidAmount" className="block text-sm font-medium text-gray-700 mb-1">
@@ -149,19 +146,19 @@ const BidForm = ({ crop }: BidFormProps) => {
             type="number"
             value={bidAmount}
             onChange={(e) => setBidAmount(Number(e.target.value))}
-            min={crop.currentBid ? crop.currentBid + 1 : crop.basePrice + 1}
+            min={(crop.currentBid || crop.price) + 1}
             step={1}
             required
             className="w-full"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Minimum bid: ₹{(crop.currentBid ? crop.currentBid : crop.basePrice) + 1}
+            Minimum bid: ₹{(crop.currentBid || crop.price) + 1}
           </p>
         </div>
-        
-        <Button 
-          type="submit" 
-          className="w-full bg-green-600 hover:bg-green-700" 
+
+        <Button
+          type="submit"
+          className="w-full bg-green-600 hover:bg-green-700"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Processing...' : 'Place Bid'}

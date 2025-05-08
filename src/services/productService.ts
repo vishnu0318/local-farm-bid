@@ -18,6 +18,8 @@ export interface Product {
   available?: boolean;
   bid_start?: string;
   bid_end?: string;
+  currentBid?: number;
+  highestBidderName?: string;
 }
 
 export interface Bid {
@@ -70,7 +72,7 @@ export const getProductBids = async (productId: string): Promise<Bid[]> => {
   try {
     // Since we don't have a bids table yet, return an empty array
     // In a real app, you would have a bids table to query
-    console.log('Fetching bids for product:', productId);
+    
     return [];
     
     // When you have a bids table, you can uncomment this:
