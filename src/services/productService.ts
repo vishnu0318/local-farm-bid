@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { mockProducts } from "./mockData";
 
@@ -20,6 +19,7 @@ export interface Product {
   bid_end?: string;
   currentBid?: number;
   highestBidderName?: string;
+  winningBid?: number;
 }
 
 export interface Bid {
@@ -53,6 +53,28 @@ export const getProductById = async (productId: string): Promise<Product | null>
       return null;
     }
     
+    // Fetch the current highest bid for this product
+    try {
+      const { data: bidData } = await supabase
+        .from('bids')
+        .select('amount, bidder_name')
+        .eq('product_id', productId)
+        .order('amount', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (bidData) {
+        // Add highest bid information to the product
+        return {
+          ...data as Product,
+          currentBid: bidData.amount,
+          highestBidderName: bidData.bidder_name
+        };
+      }
+    } catch (bidError) {
+      console.log('No bids found for product');
+    }
+    
     return data as Product;
   } catch (error) {
     console.error('Error fetching product:', error);
@@ -70,18 +92,11 @@ export const getProductById = async (productId: string): Promise<Product | null>
 
 export const getProductBids = async (productId: string): Promise<Bid[]> => {
   try {
-    // Since we don't have a bids table yet, return an empty array
-    // In a real app, you would have a bids table to query
-    
-    return [];
-    
-    // When you have a bids table, you can uncomment this:
-    /*
     const { data, error } = await supabase
       .from('bids')
       .select('*')
       .eq('product_id', productId)
-      .order('created_at', { ascending: false });
+      .order('amount', { ascending: false });
     
     if (error) {
       console.error('Error fetching bids:', error);
@@ -89,7 +104,6 @@ export const getProductBids = async (productId: string): Promise<Bid[]> => {
     }
     
     return data as Bid[];
-    */
   } catch (error) {
     console.error('Error fetching bids:', error);
     return [];
@@ -156,11 +170,28 @@ export const deleteProduct = async (id: string): Promise<{ success: boolean; err
 export const placeBid = async(
   product: Product,
   user: { id: string; name: string },
-  bidAmount: number,
-  setBidAmount: (value: number) => void,
-  setIsSubmitting: (value: boolean) => void
-)=>{
+  bidAmount: number
+): Promise<{ success: boolean; error?: string; bid?: Bid }> => {
   try {
+    // Make sure the bid is higher than the current highest bid or the base price
+    const minBidAmount = product.currentBid || product.price;
+    
+    if (bidAmount <= minBidAmount) {
+      return { 
+        success: false, 
+        error: `Your bid must be higher than the current bid of ₹${minBidAmount}`
+      };
+    }
+    
+    // Check if the auction has ended
+    if (product.bid_end && new Date() > new Date(product.bid_end)) {
+      return { 
+        success: false, 
+        error: 'This auction has already ended'
+      };
+    }
+
+    // Insert the bid
     const { data, error } = await supabase.from("bids").insert([
       {
         product_id: product.id,
@@ -168,19 +199,26 @@ export const placeBid = async(
         bidder_name: user.name,
         amount: bidAmount,
       },
-    ]);
+    ]).select();
 
     if (error) {
-      console.error(error);
-      return { success: false, error: error.message};
-    } else {
-      setBidAmount(bidAmount + 5);
-      return { success: true, message: 'Your bid has been placed successfully!'};
+      console.error('Error placing bid:', error);
+      return { success: false, error: error.message };
     }
+    
+    console.log('Bid placed successfully:', data);
+    
+    // Return success with the created bid
+    return { 
+      success: true, 
+      message: 'Your bid has been placed successfully!',
+      bid: data[0] as Bid
+    };
   } catch (error) {
-    console.error(error);
-    return { success: false, error: error.message};
-  } finally {
-    setIsSubmitting(false);
+    console.error('Error placing bid:', error);
+    return { 
+      success: false, 
+      error: error.message || 'An unexpected error occurred'
+    };
   }
 }

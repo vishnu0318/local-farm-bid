@@ -26,7 +26,7 @@ export const useBidsData = () => {
       setIsLoading(true);
       
       try {
-        // Fetch actual bids from the database
+        // Fetch actual bids from the database with product info joined
         const userBids = await getUserBidsWithProducts(user.id);
         
         if (userBids.length > 0) {
@@ -71,12 +71,18 @@ export const useBidsData = () => {
         { 
           event: '*', 
           schema: 'public', 
-          table: 'bids',
-          filter: `bidder_id=eq.${user?.id}`
+          table: 'bids'
         }, 
-        () => {
-          // Refresh data when there's a change to the user's bids
-          fetchMyBids();
+        (payload) => {
+          // Check if this is a bid by the current user or on a product the user has bid on
+          const isRelatedToBid = 
+            payload.new.bidder_id === user?.id ||
+            bids.some(bid => bid.product_id === payload.new.product_id);
+            
+          // Refresh data when there's a change that affects this user
+          if (isRelatedToBid) {
+            fetchMyBids();
+          }
         }
       )
       .subscribe();

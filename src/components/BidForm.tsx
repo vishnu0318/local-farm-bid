@@ -1,13 +1,13 @@
+
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useData } from '@/context/DataContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { IndianRupee } from 'lucide-react';
-import { Product } from '@/services/productService';
+import { Product, placeBid } from '@/services/productService';
 import { supabase } from '@/integrations/supabase/client';
 
 interface BidFormProps {
@@ -15,8 +15,8 @@ interface BidFormProps {
 }
 
 const BidForm = ({ crop }: BidFormProps) => {
-  const { user, isBuyer } = useAuth();
-  const { placeBid } = useData();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [bidAmount, setBidAmount] = useState<number>(() => {
     return crop.currentBid ? crop.currentBid + 5 : crop.price + 5;
   });
@@ -38,7 +38,7 @@ const BidForm = ({ crop }: BidFormProps) => {
       return;
     }
 
-    if (!isBuyer()) {
+    if (!user.user_metadata?.role || user.user_metadata.role !== 'buyer') {
       toast.error('Only buyers can place bids');
       return;
     }
@@ -61,21 +61,24 @@ const BidForm = ({ crop }: BidFormProps) => {
     setIsSubmitting(true);
 
     try {
-      const {error} = await supabase.from('bids').insert([
-        {
-          product_id: crop.id,
-          bidder_id: user.id,
-          bidder_name: user.name,
-          amount: bidAmount,
-        },
-      ]);
+      const bidUserName = user.user_metadata?.name || user.email?.split('@')[0] || 'Anonymous';
+      
+      const result = await placeBid(
+        crop,
+        { id: user.id, name: bidUserName },
+        bidAmount
+      );
   
-      if (error) {
-        console.error(error);
-        toast.error('Failed to place bid. Please try again.');
-      } else {
+      if (result.success) {
         toast.success('Your bid has been placed successfully!');
         setBidAmount(bidAmount + 5);
+        
+        // Navigate to My Bids page to see the bid
+        setTimeout(() => {
+          navigate('/buyer/my-bids');
+        }, 1500);
+      } else {
+        toast.error(result.error || 'Failed to place bid. Please try again.');
       }
     } catch (error) {
       console.error(error);
@@ -101,7 +104,7 @@ const BidForm = ({ crop }: BidFormProps) => {
     );
   }
 
-  if (user?.role === 'farmer') {
+  if (user?.user_metadata?.role === 'farmer') {
     return (
       <Card className="p-4 text-center">
         <h3 className="font-semibold text-lg mb-2">Farmers Cannot Bid</h3>

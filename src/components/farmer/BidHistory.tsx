@@ -5,9 +5,14 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { IndianRupee } from 'lucide-react';
 import { format } from 'date-fns';
-import { Bid } from '@/types/marketplace';
-import { getBidHistoryForFarmer, subscribeToBidChanges } from '@/services/bidService';
 import { supabase } from '@/integrations/supabase/client';
+
+interface Bid {
+  id: string;
+  bidder_name: string;
+  amount: number;
+  created_at: string;
+}
 
 interface BidHistoryProps {
   productId: string;
@@ -22,8 +27,18 @@ const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
     const fetchBids = async () => {
       try {
         setLoading(true);
-        const bidHistory = await getBidHistoryForFarmer(productId);
-        setBids(bidHistory);
+        
+        const { data, error } = await supabase
+          .from('bids')
+          .select('id, bidder_name, amount, created_at')
+          .eq('product_id', productId)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching bid history:', error);
+        } else {
+          setBids(data as Bid[]);
+        }
       } catch (error) {
         console.error('Error fetching bid history:', error);
       } finally {
@@ -34,10 +49,31 @@ const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
     fetchBids();
 
     // Subscribe to real-time bid updates
-    const channel = subscribeToBidChanges(productId, () => {
-      // When a new bid is placed, refresh the bid history
-      fetchBids();
-    });
+    const channel = supabase
+      .channel(`product-bid-history-${productId}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'bids',
+          filter: `product_id=eq.${productId}`
+        }, 
+        async (payload) => {
+          console.log('New bid received in history:', payload);
+          
+          // Refresh all bids to ensure correct ordering
+          const { data } = await supabase
+            .from('bids')
+            .select('id, bidder_name, amount, created_at')
+            .eq('product_id', productId)
+            .order('created_at', { ascending: false });
+            
+          if (data) {
+            setBids(data as Bid[]);
+          }
+        }
+      )
+      .subscribe();
     
     return () => {
       supabase.removeChannel(channel);

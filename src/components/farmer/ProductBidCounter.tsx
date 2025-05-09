@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { IndianRupee } from 'lucide-react';
-import { countProductBids, getHighestBid, subscribeToBidChanges } from '@/services/bidService';
 import { supabase } from '@/integrations/supabase/client';
 
 interface ProductBidCounterProps {
@@ -19,13 +18,48 @@ const ProductBidCounter: React.FC<ProductBidCounterProps> = ({ productId }) => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [count, highest] = await Promise.all([
-          countProductBids(productId),
-          getHighestBid(productId)
-        ]);
         
-        setBidCount(count);
-        setHighestBid(highest);
+        // Count bids
+        const { count: bidCountResult, error: countError } = await supabase
+          .from('bids')
+          .select('id', { count: 'exact', head: true })
+          .eq('product_id', productId);
+          
+        if (countError) {
+          console.error('Error counting bids:', countError);
+        } else {
+          setBidCount(bidCountResult || 0);
+        }
+        
+        // Get highest bid
+        const { data: highestBidData, error: bidError } = await supabase
+          .from('bids')
+          .select('amount')
+          .eq('product_id', productId)
+          .order('amount', { ascending: false })
+          .limit(1)
+          .single();
+          
+        if (bidError) {
+          if (bidError.code !== 'PGRST116') { // If not "no rows found"
+            console.error('Error fetching highest bid:', bidError);
+          }
+          
+          // If no bids yet, get product base price
+          const { data: productData, error: productError } = await supabase
+            .from('products')
+            .select('price')
+            .eq('id', productId)
+            .single();
+            
+          if (productError) {
+            console.error('Error fetching product price:', productError);
+          } else {
+            setHighestBid(productData.price);
+          }
+        } else {
+          setHighestBid(highestBidData.amount);
+        }
       } catch (error) {
         console.error('Error fetching bid data:', error);
       } finally {
@@ -36,10 +70,27 @@ const ProductBidCounter: React.FC<ProductBidCounterProps> = ({ productId }) => {
     fetchData();
 
     // Subscribe to real-time bid updates
-    const channel = subscribeToBidChanges(productId, () => {
-      // When a new bid comes in, refresh the bid count and highest bid
-      fetchData();
-    });
+    const channel = supabase
+      .channel(`product-bids-${productId}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'bids',
+          filter: `product_id=eq.${productId}`
+        }, 
+        (payload) => {
+          console.log('New bid received:', payload);
+          setBidCount(prev => prev + 1);
+          
+          // Update highest bid if this one is higher
+          const newBid = payload.new as { amount: number };
+          if (newBid.amount > highestBid) {
+            setHighestBid(newBid.amount);
+          }
+        }
+      )
+      .subscribe();
     
     return () => {
       supabase.removeChannel(channel);
