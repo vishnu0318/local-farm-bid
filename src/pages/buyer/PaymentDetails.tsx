@@ -38,7 +38,7 @@ const cardFormSchema = z.object({
 const upiFormSchema = z.object({
   upiId: z.string()
     .min(5, "Valid UPI ID required")
-    .includes('@', "UPI ID must contain @"),
+    .refine((val) => val.includes('@'), { message: "UPI ID must contain @" }),
 });
 
 const PaymentDetails = () => {
@@ -56,7 +56,7 @@ const PaymentDetails = () => {
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
     addressLine1: '',
     city: '',
-    state: 'Karnataka',
+    state: '',
     postalCode: ''
   });
 
@@ -150,7 +150,11 @@ const PaymentDetails = () => {
 
   // Process card payment
   const handleCardSubmit = cardForm.handleSubmit(async (data) => {
-    if (!product || !user) return;
+    if (!product || !user || !deliveryAddress.addressLine1 || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.postalCode) {
+      toast.error("Please complete all delivery address fields");
+      return;
+    }
+    
     setProcessing(true);
     
     try {
@@ -163,8 +167,8 @@ const PaymentDetails = () => {
 
       setPaymentStep('processing');
       
-      // Simulate card processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Process the payment after a brief delay to show the processing state
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Process the payment
       const result = await processPayment(
@@ -178,30 +182,13 @@ const PaymentDetails = () => {
         throw new Error(result.message || 'Payment failed');
       }
       
-      // Only create notifications if the Supabase tables are available
-      try {
-        // Update notification for the farmer
-        await supabase.from('notifications').insert([{
-          type: 'payment_received',
-          message: `Payment of ₹${amount} received for ${product.name}`,
-          product_id: product.id,
-          farmer_id: product.farmer_id,
-          read: false,
-          bidder_name: user.name || user.email,
-          bid_amount: amount
-        }]);
-      } catch (notificationError) {
-        console.error("Notification error:", notificationError);
-        // Continue with payment flow even if notification fails
-      }
-      
       setPaymentStep('success');
       toast.success("Payment successful!");
       
       // Navigate after a short delay to show success state
       setTimeout(() => {
         navigate(`/buyer/product/${product.id}`);
-      }, 3000);
+      }, 2000);
       
     } catch (error: any) {
       console.error("Payment error:", error);
@@ -214,7 +201,11 @@ const PaymentDetails = () => {
 
   // Process UPI payment
   const handleUpiSubmit = upiForm.handleSubmit(async (data) => {
-    if (!product || !user) return;
+    if (!product || !user || !deliveryAddress.addressLine1 || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.postalCode) {
+      toast.error("Please complete all delivery address fields");
+      return;
+    }
+    
     setProcessing(true);
     
     try {
@@ -227,8 +218,8 @@ const PaymentDetails = () => {
 
       setPaymentStep('processing');
       
-      // Verify UPI ID (simulated)
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Process the payment after a brief delay to show the processing state
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Process the payment
       const result = await processPayment(
@@ -243,30 +234,13 @@ const PaymentDetails = () => {
         throw new Error(result.message || 'UPI Payment failed');
       }
       
-      // Only create notifications if the Supabase tables are available
-      try {
-        // Update notification for the farmer
-        await supabase.from('notifications').insert([{
-          type: 'payment_received',
-          message: `UPI Payment of ₹${amount} received for ${product.name}`,
-          product_id: product.id,
-          farmer_id: product.farmer_id,
-          read: false,
-          bidder_name: user.name || user.email,
-          bid_amount: amount
-        }]);
-      } catch (notificationError) {
-        console.error("Notification error:", notificationError);
-        // Continue with payment flow even if notification fails
-      }
-      
       setPaymentStep('success');
       toast.success("UPI Payment successful!");
       
       // Navigate after a short delay to show success state
       setTimeout(() => {
         navigate(`/buyer/product/${product.id}`);
-      }, 3000);
+      }, 2000);
       
     } catch (error: any) {
       console.error("UPI Payment error:", error);
@@ -279,7 +253,11 @@ const PaymentDetails = () => {
 
   // Process COD payment
   const handleCodPayment = async () => {
-    if (!product || !user) return;
+    if (!product || !user || !deliveryAddress.addressLine1 || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.postalCode) {
+      toast.error("Please complete all delivery address fields");
+      return;
+    }
+    
     setProcessing(true);
     
     try {
@@ -303,30 +281,13 @@ const PaymentDetails = () => {
         throw new Error(result.message || 'Failed to place COD order');
       }
       
-      // Only create notifications if the Supabase tables are available
-      try {
-        // Update notification for the farmer
-        await supabase.from('notifications').insert([{
-          type: 'payment_received',
-          message: `Cash on Delivery order of ₹${amount} placed for ${product.name}`,
-          product_id: product.id,
-          farmer_id: product.farmer_id,
-          read: false,
-          bidder_name: user.name || user.email,
-          bid_amount: amount
-        }]);
-      } catch (notificationError) {
-        console.error("Notification error:", notificationError);
-        // Continue with payment flow even if notification fails
-      }
-      
       setPaymentStep('success');
       toast.success("Cash on Delivery order placed successfully!");
       
       // Navigate after a short delay to show success state
       setTimeout(() => {
         navigate(`/buyer/product/${product.id}`);
-      }, 3000);
+      }, 2000);
       
     } catch (error: any) {
       console.error("COD error:", error);
@@ -449,6 +410,7 @@ const PaymentDetails = () => {
                       onChange={handleAddressChange}
                       placeholder="Enter your street address"
                       className="mt-1"
+                      required
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -461,15 +423,19 @@ const PaymentDetails = () => {
                         onChange={handleAddressChange}
                         placeholder="Enter city"
                         className="mt-1"
+                        required
                       />
                     </div>
                     <div>
                       <Label htmlFor="state">State</Label>
                       <Input 
                         id="state" 
-                        value="Karnataka"
-                        disabled
-                        className="mt-1 bg-gray-50"
+                        name="state"
+                        value={deliveryAddress.state}
+                        onChange={handleAddressChange}
+                        placeholder="Enter state"
+                        className="mt-1"
+                        required
                       />
                     </div>
                   </div>
@@ -482,6 +448,7 @@ const PaymentDetails = () => {
                       onChange={handleAddressChange}
                       placeholder="Enter postal code"
                       className="mt-1"
+                      required
                     />
                   </div>
                 </div>

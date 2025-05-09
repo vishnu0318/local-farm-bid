@@ -78,12 +78,12 @@ export const recordPayment = async (
     if (!user) throw new Error("User not authenticated");
     
     try {
-      // Convert DeliveryAddress to a plain object that can be stored as Json
+      // Convert DeliveryAddress to a JSON object for storage
       const addressObject = {
         addressLine1: deliveryAddress.addressLine1,
-        addressLine2: deliveryAddress.addressLine2,
+        addressLine2: deliveryAddress.addressLine2 || null,
         city: deliveryAddress.city,
-        state: deliveryAddress.state,
+        state: deliveryAddress.state || '',
         postalCode: deliveryAddress.postalCode
       };
 
@@ -267,8 +267,31 @@ export const processPayment = async (
         return { success: false, message: 'Invalid payment method' };
     }
     
-    // Generate and return invoice data
+    // After successful payment, try to create notification
     if (result.success && result.data) {
+      try {
+        // Get the farmer ID from the product
+        const farmerId = result.data.product?.farmer_id;
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (farmerId && user) {
+          // Create notification for the farmer
+          await supabase.from('notifications').insert([{
+            type: 'payment_received',
+            message: `Payment of ₹${amount} received for ${result.data.product.name}`,
+            product_id: productId,
+            farmer_id: farmerId,
+            read: false,
+            bidder_name: user.user_metadata?.name || user.email,
+            bid_amount: amount
+          }]);
+        }
+      } catch (notificationError) {
+        console.error("Error creating notification:", notificationError);
+        // Continue even if notification fails
+      }
+
+      // Generate and return invoice data
       const invoiceData = {
         transactionId: result.data.transactionId,
         productName: result.data.product.name,

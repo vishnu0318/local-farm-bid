@@ -1,3 +1,4 @@
+
 export interface Product {
   id: string;
   name: string;
@@ -49,7 +50,7 @@ export interface DeliveryAddress {
   addressLine1: string;
   addressLine2?: string;
   city: string;
-  state: string;
+  state?: string;
   postalCode: string;
 }
 
