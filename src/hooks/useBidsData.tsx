@@ -40,7 +40,7 @@ export const useBidsData = () => {
               .limit(1)
               .single();
               
-            const isHighestBidder = highestBid && highestBid.bidder_id === user.id;
+            const isHighestBidder = highestBid && highestBid?.bidder_id === user.id;
             
             // Add the highest_bidder_id property to the product
             if (bid.product) {
@@ -76,8 +76,8 @@ export const useBidsData = () => {
         (payload) => {
           // Check if this is a bid by the current user or on a product the user has bid on
           const isRelatedToBid = 
-            payload.new.bidder_id === user?.id ||
-            bids.some(bid => bid.product_id === payload.new.product_id);
+            payload.new && payload.new.bidder_id === user?.id ||
+            bids.some(bid => bid.product_id === (payload.new && payload.new.product_id));
             
           // Refresh data when there's a change that affects this user
           if (isRelatedToBid) {

@@ -22,6 +22,7 @@ export interface Product {
   winningBid?: number;
   currentBid?: number; 
   highestBidderName?: string;
+  notifications?: Notification[];
 }
 
 export interface Bid {
@@ -60,4 +61,17 @@ export interface Order {
     postalCode: string;
   };
   created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  type: 'new_bid' | 'auction_ended' | 'payment_received';
+  message: string;
+  read: boolean;
+  created_at: string;
+  product_id?: string;
+  bid_id?: string;
+  bidder_id?: string;
+  bidder_name?: string;
+  bid_amount?: number;
 }

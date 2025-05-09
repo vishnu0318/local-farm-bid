@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { IndianRupee } from 'lucide-react';
+import { IndianRupee, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface Bid {
   id: string;
@@ -21,6 +22,7 @@ interface BidHistoryProps {
 const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
   const [bids, setBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);
+  const [newBidsNotification, setNewBidsNotification] = useState(false);
 
   useEffect(() => {
     // Fetch bid history
@@ -61,6 +63,16 @@ const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
         async (payload) => {
           console.log('New bid received in history:', payload);
           
+          // Mark that we have new bids
+          setNewBidsNotification(true);
+          
+          // Show toast notification
+          const newBid = payload.new as Bid;
+          toast.success(`New bid of ₹${newBid.amount} placed by ${newBid.bidder_name}`, {
+            id: `bid-history-${newBid.id}`,
+            duration: 5000,
+          });
+          
           // Refresh all bids to ensure correct ordering
           const { data } = await supabase
             .from('bids')
@@ -79,6 +91,11 @@ const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
       supabase.removeChannel(channel);
     };
   }, [productId]);
+
+  // Clear notification when user clicks the bell icon
+  const clearNotifications = () => {
+    setNewBidsNotification(false);
+  };
 
   if (loading) {
     return (
@@ -115,7 +132,20 @@ const BidHistory: React.FC<BidHistoryProps> = ({ productId }) => {
       <CardHeader>
         <CardTitle className="flex justify-between items-center">
           <span>Bid History</span>
-          <Badge>{bids.length} {bids.length === 1 ? 'bid' : 'bids'}</Badge>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Bell 
+                className={`h-5 w-5 cursor-pointer ${newBidsNotification ? 'text-red-500' : 'text-gray-400'}`} 
+                onClick={clearNotifications}
+              />
+              {newBidsNotification && (
+                <Badge className="absolute -top-2 -right-2 h-4 w-4 p-0 rounded-full flex items-center justify-center bg-red-500">
+                  !
+                </Badge>
+              )}
+            </div>
+            <Badge>{bids.length} {bids.length === 1 ? 'bid' : 'bids'}</Badge>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>

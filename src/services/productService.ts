@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { mockProducts } from "./mockData";
 
@@ -211,7 +212,6 @@ export const placeBid = async(
     // Return success with the created bid
     return { 
       success: true, 
-      message: 'Your bid has been placed successfully!',
       bid: data[0] as Bid
     };
   } catch (error) {
