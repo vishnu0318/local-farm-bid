@@ -1,5 +1,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
+import { DeliveryAddress } from "@/types/marketplace";
 
 interface PaymentIntentRequest {
   amount: number;
@@ -11,14 +12,6 @@ interface PaymentIntentRequest {
 interface PaymentIntentResponse {
   clientSecret?: string;
   error?: string;
-}
-
-interface DeliveryAddress {
-  addressLine1: string;
-  addressLine2?: string;
-  city: string;
-  state: string;
-  postalCode: string;
 }
 
 /**
@@ -85,6 +78,15 @@ export const recordPayment = async (
     if (!user) throw new Error("User not authenticated");
     
     try {
+      // Convert DeliveryAddress to a plain object that can be stored as Json
+      const addressObject = {
+        addressLine1: deliveryAddress.addressLine1,
+        addressLine2: deliveryAddress.addressLine2,
+        city: deliveryAddress.city,
+        state: deliveryAddress.state,
+        postalCode: deliveryAddress.postalCode
+      };
+
       // Create payment record in orders table
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
@@ -94,7 +96,7 @@ export const recordPayment = async (
           amount,
           payment_method: paymentMethod,
           payment_status: status,
-          delivery_address: deliveryAddress,
+          delivery_address: addressObject,
           transaction_id: transactionId,
           payment_date: new Date().toISOString()
         })
@@ -324,8 +326,7 @@ export const generateInvoice = async (orderId: string) => {
           unit, 
           description,
           farmer:farmer_id(name, id)
-        ),
-        buyer:buyer_id(name, id)
+        )
       `)
       .eq('id', orderId)
       .single();
@@ -336,20 +337,40 @@ export const generateInvoice = async (orderId: string) => {
       return { success: false, error: 'Order not found' };
     }
     
+    // Try to get buyer details, handle case if relation doesn't exist
+    let buyerDetails = { name: 'Unknown Buyer', id: null };
+    
+    try {
+      const { data: userData } = await supabase
+        .from('profiles')
+        .select('name, id')
+        .eq('id', data.buyer_id)
+        .single();
+        
+      if (userData) {
+        buyerDetails = { 
+          name: userData.name || 'Unknown Buyer', 
+          id: userData.id 
+        };
+      }
+    } catch (error) {
+      console.log('Could not fetch buyer details, using default');
+    }
+    
+    // Try to get farmer details if not available in the join
+    let sellerDetails = { name: 'Unknown Seller', id: null };
+    if (data.product?.farmer) {
+      sellerDetails = data.product.farmer;
+    }
+    
     // Format the invoice data
     const invoiceData = {
       invoiceNumber: `INV-${orderId.slice(0, 8)}`,
       orderId: orderId,
       transactionId: data.transaction_id,
-      date: new Date(data.payment_date).toLocaleDateString(),
-      buyerDetails: {
-        name: data.buyer?.name || 'Unknown Buyer',
-        id: data.buyer?.id
-      },
-      sellerDetails: {
-        name: data.product?.farmer?.name || 'Unknown Seller',
-        id: data.product?.farmer?.id
-      },
+      date: new Date(data.payment_date || data.created_at).toLocaleDateString(),
+      buyerDetails: buyerDetails,
+      sellerDetails: sellerDetails,
       productDetails: {
         name: data.product?.name || 'Unknown Product',
         quantity: data.product?.quantity || 0,

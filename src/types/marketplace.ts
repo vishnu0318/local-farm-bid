@@ -1,4 +1,3 @@
-
 export interface Product {
   id: string;
   name: string;
@@ -46,6 +45,14 @@ export interface FarmerProfile {
   company_name?: string;
 }
 
+export interface DeliveryAddress {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
 export interface Order {
   id: string;
   product_id: string;
@@ -53,13 +60,7 @@ export interface Order {
   amount: number;
   payment_method: 'cod' | 'upi' | 'card';
   payment_status: 'pending' | 'completed' | 'failed';
-  delivery_address?: {
-    addressLine1: string;
-    addressLine2?: string;
-    city: string;
-    state: string;
-    postalCode: string;
-  };
+  delivery_address?: DeliveryAddress;
   transaction_id?: string;
   payment_date?: string;
   created_at: string;

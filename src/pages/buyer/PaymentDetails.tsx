@@ -11,7 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
 import { IndianRupee, CreditCard, Wallet, Banknote, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Product } from '@/types/marketplace';
+import { Product, DeliveryAddress } from '@/types/marketplace';
 import { processPayment } from '@/services/paymentService';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -38,7 +38,7 @@ const cardFormSchema = z.object({
 const upiFormSchema = z.object({
   upiId: z.string()
     .min(5, "Valid UPI ID required")
-    .includes('@', { message: "UPI ID must contain @" }),
+    .includes('@', "UPI ID must contain @"),
 });
 
 const PaymentDetails = () => {
@@ -53,7 +53,7 @@ const PaymentDetails = () => {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [processing, setProcessing] = useState(false);
   const [paymentStep, setPaymentStep] = useState<'method' | 'details' | 'processing' | 'success'>('method');
-  const [deliveryAddress, setDeliveryAddress] = useState({
+  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
     addressLine1: '',
     city: '',
     state: 'Karnataka',
