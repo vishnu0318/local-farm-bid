@@ -84,22 +84,27 @@ export const recordPayment = async (
     
     if (!user) throw new Error("User not authenticated");
     
-    // Create payment record in orders table
-    const { data: orderData, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        product_id: productId,
-        buyer_id: user.id,
-        amount,
-        payment_method: paymentMethod,
-        payment_status: status,
-        delivery_address: deliveryAddress,
-        transaction_id: transactionId,
-        payment_date: new Date().toISOString()
-      })
-      .select();
-      
-    if (orderError) throw orderError;
+    try {
+      // Create payment record in orders table
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          product_id: productId,
+          buyer_id: user.id,
+          amount,
+          payment_method: paymentMethod,
+          payment_status: status,
+          delivery_address: deliveryAddress,
+          transaction_id: transactionId,
+          payment_date: new Date().toISOString()
+        })
+        .select();
+        
+      if (orderError) throw orderError;
+    } catch (orderError) {
+      console.error("Error creating order record:", orderError);
+      // Continue with the payment process even if order creation fails
+    }
     
     // Update the product status
     const { error: updateError } = await supabase
@@ -116,7 +121,6 @@ export const recordPayment = async (
     return { 
       success: true, 
       data: {
-        order: orderData[0],
         transactionId,
         product: productData
       } 

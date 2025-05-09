@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -37,7 +36,9 @@ const cardFormSchema = z.object({
 });
 
 const upiFormSchema = z.object({
-  upiId: z.string().min(5, "Valid UPI ID required").includes('@', "UPI ID must contain @")
+  upiId: z.string()
+    .min(5, "Valid UPI ID required")
+    .includes('@', { message: "UPI ID must contain @" }),
 });
 
 const PaymentDetails = () => {
@@ -177,9 +178,10 @@ const PaymentDetails = () => {
         throw new Error(result.message || 'Payment failed');
       }
       
-      // Update notification for the farmer
-      await supabase.from('notifications').insert([
-        {
+      // Only create notifications if the Supabase tables are available
+      try {
+        // Update notification for the farmer
+        await supabase.from('notifications').insert([{
           type: 'payment_received',
           message: `Payment of ₹${amount} received for ${product.name}`,
           product_id: product.id,
@@ -187,8 +189,11 @@ const PaymentDetails = () => {
           read: false,
           bidder_name: user.name || user.email,
           bid_amount: amount
-        }
-      ]);
+        }]);
+      } catch (notificationError) {
+        console.error("Notification error:", notificationError);
+        // Continue with payment flow even if notification fails
+      }
       
       setPaymentStep('success');
       toast.success("Payment successful!");
@@ -238,9 +243,10 @@ const PaymentDetails = () => {
         throw new Error(result.message || 'UPI Payment failed');
       }
       
-      // Update notification for the farmer
-      await supabase.from('notifications').insert([
-        {
+      // Only create notifications if the Supabase tables are available
+      try {
+        // Update notification for the farmer
+        await supabase.from('notifications').insert([{
           type: 'payment_received',
           message: `UPI Payment of ₹${amount} received for ${product.name}`,
           product_id: product.id,
@@ -248,8 +254,11 @@ const PaymentDetails = () => {
           read: false,
           bidder_name: user.name || user.email,
           bid_amount: amount
-        }
-      ]);
+        }]);
+      } catch (notificationError) {
+        console.error("Notification error:", notificationError);
+        // Continue with payment flow even if notification fails
+      }
       
       setPaymentStep('success');
       toast.success("UPI Payment successful!");
@@ -294,9 +303,10 @@ const PaymentDetails = () => {
         throw new Error(result.message || 'Failed to place COD order');
       }
       
-      // Update notification for the farmer
-      await supabase.from('notifications').insert([
-        {
+      // Only create notifications if the Supabase tables are available
+      try {
+        // Update notification for the farmer
+        await supabase.from('notifications').insert([{
           type: 'payment_received',
           message: `Cash on Delivery order of ₹${amount} placed for ${product.name}`,
           product_id: product.id,
@@ -304,8 +314,11 @@ const PaymentDetails = () => {
           read: false,
           bidder_name: user.name || user.email,
           bid_amount: amount
-        }
-      ]);
+        }]);
+      } catch (notificationError) {
+        console.error("Notification error:", notificationError);
+        // Continue with payment flow even if notification fails
+      }
       
       setPaymentStep('success');
       toast.success("Cash on Delivery order placed successfully!");

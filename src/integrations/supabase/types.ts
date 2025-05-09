@@ -83,6 +83,100 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          bid_amount: number | null
+          bidder_id: string | null
+          bidder_name: string | null
+          created_at: string | null
+          farmer_id: string | null
+          id: string
+          message: string
+          product_id: string | null
+          read: boolean | null
+          type: string
+        }
+        Insert: {
+          bid_amount?: number | null
+          bidder_id?: string | null
+          bidder_name?: string | null
+          created_at?: string | null
+          farmer_id?: string | null
+          id?: string
+          message: string
+          product_id?: string | null
+          read?: boolean | null
+          type: string
+        }
+        Update: {
+          bid_amount?: number | null
+          bidder_id?: string | null
+          bidder_name?: string | null
+          created_at?: string | null
+          farmer_id?: string | null
+          id?: string
+          message?: string
+          product_id?: string | null
+          read?: boolean | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          amount: number
+          buyer_id: string
+          created_at: string | null
+          delivery_address: Json | null
+          id: string
+          payment_date: string | null
+          payment_method: string
+          payment_status: string
+          product_id: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          amount: number
+          buyer_id: string
+          created_at?: string | null
+          delivery_address?: Json | null
+          id?: string
+          payment_date?: string | null
+          payment_method: string
+          payment_status: string
+          product_id?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          amount?: number
+          buyer_id?: string
+          created_at?: string | null
+          delivery_address?: Json | null
+          id?: string
+          payment_date?: string | null
+          payment_method?: string
+          payment_status?: string
+          product_id?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           available: boolean | null
