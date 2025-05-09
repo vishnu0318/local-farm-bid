@@ -211,15 +211,15 @@ const FarmerDashboard = () => {
         
       if (error || !products) {
         console.error('Error fetching products for realtime updates:', error);
-        return;
+        return null;
       }
       
       const productIds = products.map(p => p.id);
       
-      if (productIds.length === 0) return;
+      if (productIds.length === 0) return null;
       
       // Subscribe to bid changes
-      const channel = supabase
+      return supabase
         .channel('farmer-dashboard-updates')
         .on('postgres_changes', 
           { 
@@ -263,11 +263,14 @@ const FarmerDashboard = () => {
           }
         )
         .subscribe();
-        
-      return channel;
     };
     
-    const channel = setupRealtimeBids();
+    // Execute the setupRealtimeBids function and store the channel
+    let channel: any = null;
+    
+    setupRealtimeBids().then(result => {
+      channel = result;
+    });
     
     // Cleanup
     return () => {
