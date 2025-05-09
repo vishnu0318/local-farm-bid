@@ -10,9 +10,14 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
-import { IndianRupee, CreditCard, Wallet, Banknote } from 'lucide-react';
+import { IndianRupee, CreditCard, Wallet, Banknote, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Product } from '@/types/marketplace';
+import { processPayment } from '@/services/paymentService';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 
 // Define a type that extends Product to include winningBid property
 interface ProductWithWinningBid extends Product {
@@ -22,6 +27,18 @@ interface ProductWithWinningBid extends Product {
 
 // Initialize Stripe
 const stripePromise = loadStripe("pk_test_51OLPCESIYS9RARqbGN1mSEVAD4Dc2njuu5riGLFQPxV1qVjJ9SeBBAAzwkZLEjtEr3HpivbvLfWLQFtibQyMvTWq00ZC7FZu82");
+
+// Form validation schemas
+const cardFormSchema = z.object({
+  cardNumber: z.string().min(16).max(19).regex(/^\d+$/, "Card number must contain only digits"),
+  cardName: z.string().min(2, "Name on card is required"),
+  expiryDate: z.string().regex(/^(0[1-9]|1[0-2])\/([0-9]{2})$/, "Expiry date must be MM/YY format"),
+  cvv: z.string().length(3, "CVV must be 3 digits").regex(/^\d+$/, "CVV must contain only digits"),
+});
+
+const upiFormSchema = z.object({
+  upiId: z.string().min(5, "Valid UPI ID required").includes('@', "UPI ID must contain @")
+});
 
 const PaymentDetails = () => {
   const { user } = useAuth();
@@ -34,6 +51,31 @@ const PaymentDetails = () => {
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [processing, setProcessing] = useState(false);
+  const [paymentStep, setPaymentStep] = useState<'method' | 'details' | 'processing' | 'success'>('method');
+  const [deliveryAddress, setDeliveryAddress] = useState({
+    addressLine1: '',
+    city: '',
+    state: 'Karnataka',
+    postalCode: ''
+  });
+
+  // Forms for different payment methods
+  const cardForm = useForm({
+    resolver: zodResolver(cardFormSchema),
+    defaultValues: {
+      cardNumber: '',
+      cardName: '',
+      expiryDate: '',
+      cvv: '',
+    }
+  });
+
+  const upiForm = useForm({
+    resolver: zodResolver(upiFormSchema),
+    defaultValues: {
+      upiId: '',
+    }
+  });
 
   // Load product details
   useEffect(() => {
@@ -90,9 +132,24 @@ const PaymentDetails = () => {
     fetchProduct();
   }, [productId, user?.id, navigate]);
 
-  const handlePayment = async () => {
+  // Handle payment method selection
+  const handlePaymentMethodSelect = (method: string) => {
+    setPaymentMethod(method);
+    setPaymentStep('details');
+  };
+
+  // Handle address input change
+  const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setDeliveryAddress(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Process card payment
+  const handleCardSubmit = cardForm.handleSubmit(async (data) => {
     if (!product || !user) return;
-    
     setProcessing(true);
     
     try {
@@ -102,89 +159,174 @@ const PaymentDetails = () => {
       if (!amount) {
         throw new Error('Invalid bid amount');
       }
+
+      setPaymentStep('processing');
       
-      if (paymentMethod === 'card') {
-        // Create a Stripe payment intent
-        const response = await fetch('/api/create-payment-intent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${await supabase.auth.getSession().then(res => res.data.session?.access_token)}`
-          },
-          body: JSON.stringify({
-            amount,
-            productId: product.id,
-            productName: product.name,
-            paymentMethod
-          })
-        });
-        
-        const { clientSecret, error } = await response.json();
-        
-        if (error) {
-          throw new Error(error);
-        }
-        
-        // Load Stripe
-        const stripe = await stripePromise;
-        
-        if (!stripe) {
-          throw new Error('Failed to load Stripe');
-        }
-        
-        // Redirect to Stripe checkout
-        const result = await stripe.confirmCardPayment(clientSecret, {
-          payment_method: {
-            card: {
-              token: 'tok_visa' // Use a test token for development
-            },
-            billing_details: {
-              name: user.user_metadata?.name || user.email,
-              email: user.email
-            }
-          }
-        });
-        
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
-        
-        // Update product as paid
-        await supabase
-          .from('products')
-          .update({ paid: true })
-          .eq('id', product.id);
-          
-        toast.success("Payment successful!");
-        navigate(`/buyer/product/${product.id}`);
-      } else if (paymentMethod === 'upi') {
-        // Simulate UPI payment
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Update product as paid
-        await supabase
-          .from('products')
-          .update({ paid: true })
-          .eq('id', product.id);
-          
-        toast.success("UPI payment successful!");
-        navigate(`/buyer/product/${product.id}`);
-      } else if (paymentMethod === 'cod') {
-        // Cash on delivery
-        await supabase
-          .from('products')
-          .update({ paid: true })
-          .eq('id', product.id);
-          
-        toast.success("Cash on delivery order placed successfully!");
-        navigate(`/buyer/product/${product.id}`);
+      // Simulate card processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Process the payment
+      const result = await processPayment(
+        amount,
+        productId as string,
+        'card',
+        deliveryAddress
+      );
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Payment failed');
       }
+      
+      // Update notification for the farmer
+      await supabase.from('notifications').insert([
+        {
+          type: 'payment_received',
+          message: `Payment of ₹${amount} received for ${product.name}`,
+          product_id: product.id,
+          farmer_id: product.farmer_id,
+          read: false,
+          bidder_name: user.name || user.email,
+          bid_amount: amount
+        }
+      ]);
+      
+      setPaymentStep('success');
+      toast.success("Payment successful!");
+      
+      // Navigate after a short delay to show success state
+      setTimeout(() => {
+        navigate(`/buyer/product/${product.id}`);
+      }, 3000);
+      
     } catch (error: any) {
       console.error("Payment error:", error);
       toast.error(error.message || "Payment failed. Please try again.");
+      setPaymentStep('details');
     } finally {
       setProcessing(false);
     }
+  });
+
+  // Process UPI payment
+  const handleUpiSubmit = upiForm.handleSubmit(async (data) => {
+    if (!product || !user) return;
+    setProcessing(true);
+    
+    try {
+      // Get the payment amount from the winning bid
+      const amount = product.winningBid;
+      
+      if (!amount) {
+        throw new Error('Invalid bid amount');
+      }
+
+      setPaymentStep('processing');
+      
+      // Verify UPI ID (simulated)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Process the payment
+      const result = await processPayment(
+        amount,
+        productId as string,
+        'upi',
+        deliveryAddress,
+        data.upiId
+      );
+      
+      if (!result.success) {
+        throw new Error(result.message || 'UPI Payment failed');
+      }
+      
+      // Update notification for the farmer
+      await supabase.from('notifications').insert([
+        {
+          type: 'payment_received',
+          message: `UPI Payment of ₹${amount} received for ${product.name}`,
+          product_id: product.id,
+          farmer_id: product.farmer_id,
+          read: false,
+          bidder_name: user.name || user.email,
+          bid_amount: amount
+        }
+      ]);
+      
+      setPaymentStep('success');
+      toast.success("UPI Payment successful!");
+      
+      // Navigate after a short delay to show success state
+      setTimeout(() => {
+        navigate(`/buyer/product/${product.id}`);
+      }, 3000);
+      
+    } catch (error: any) {
+      console.error("UPI Payment error:", error);
+      toast.error(error.message || "UPI Payment failed. Please try again.");
+      setPaymentStep('details');
+    } finally {
+      setProcessing(false);
+    }
+  });
+
+  // Process COD payment
+  const handleCodPayment = async () => {
+    if (!product || !user) return;
+    setProcessing(true);
+    
+    try {
+      const amount = product.winningBid;
+      
+      if (!amount) {
+        throw new Error('Invalid bid amount');
+      }
+
+      setPaymentStep('processing');
+      
+      // Process the payment
+      const result = await processPayment(
+        amount,
+        productId as string,
+        'cod',
+        deliveryAddress
+      );
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to place COD order');
+      }
+      
+      // Update notification for the farmer
+      await supabase.from('notifications').insert([
+        {
+          type: 'payment_received',
+          message: `Cash on Delivery order of ₹${amount} placed for ${product.name}`,
+          product_id: product.id,
+          farmer_id: product.farmer_id,
+          read: false,
+          bidder_name: user.name || user.email,
+          bid_amount: amount
+        }
+      ]);
+      
+      setPaymentStep('success');
+      toast.success("Cash on Delivery order placed successfully!");
+      
+      // Navigate after a short delay to show success state
+      setTimeout(() => {
+        navigate(`/buyer/product/${product.id}`);
+      }, 3000);
+      
+    } catch (error: any) {
+      console.error("COD error:", error);
+      toast.error(error.message || "Failed to place Cash on Delivery order.");
+      setPaymentStep('details');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Go back to payment method selection
+  const handleGoBackToMethods = () => {
+    setPaymentStep('method');
   };
 
   if (loading) {
@@ -199,6 +341,41 @@ const PaymentDetails = () => {
     return (
       <div className="text-center py-8">
         <h2 className="text-2xl font-bold">Product not found</h2>
+      </div>
+    );
+  }
+
+  // Render success state
+  if (paymentStep === 'success') {
+    return (
+      <div className="container max-w-md mx-auto py-16 text-center">
+        <div className="bg-green-50 rounded-full h-24 w-24 flex items-center justify-center mx-auto mb-6">
+          <Check className="h-12 w-12 text-green-600" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Payment Successful!</h2>
+        <p className="text-gray-600 mb-8">
+          Your payment of ₹{product.winningBid} has been processed successfully.
+        </p>
+        <div className="flex justify-center">
+          <Button onClick={() => navigate(`/buyer/product/${product.id}`)}>
+            View Order Details
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Render processing state
+  if (paymentStep === 'processing') {
+    return (
+      <div className="container max-w-md mx-auto py-16 text-center">
+        <div className="mb-6 flex justify-center">
+          <div className="animate-spin h-12 w-12 border-4 border-primary border-t-transparent rounded-full"></div>
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Processing Payment</h2>
+        <p className="text-gray-600">
+          Please wait while we process your payment...
+        </p>
       </div>
     );
   }
@@ -241,68 +418,264 @@ const PaymentDetails = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Delivery address */}
+          {paymentStep === 'details' && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Delivery Address</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="addressLine1">Address Line</Label>
+                    <Input 
+                      id="addressLine1" 
+                      name="addressLine1"
+                      value={deliveryAddress.addressLine1}
+                      onChange={handleAddressChange}
+                      placeholder="Enter your street address"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="city">City</Label>
+                      <Input 
+                        id="city" 
+                        name="city"
+                        value={deliveryAddress.city}
+                        onChange={handleAddressChange}
+                        placeholder="Enter city"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="state">State</Label>
+                      <Input 
+                        id="state" 
+                        value="Karnataka"
+                        disabled
+                        className="mt-1 bg-gray-50"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="postalCode">Postal Code</Label>
+                    <Input 
+                      id="postalCode" 
+                      name="postalCode"
+                      value={deliveryAddress.postalCode}
+                      onChange={handleAddressChange}
+                      placeholder="Enter postal code"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
         
         {/* Payment methods */}
         <div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Method</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup 
-                value={paymentMethod} 
-                onValueChange={setPaymentMethod}
-                className="space-y-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="card" id="card" />
-                  <Label htmlFor="card" className="flex items-center">
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    Credit/Debit Card
-                  </Label>
+          {paymentStep === 'method' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Payment Method</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <Button 
+                    onClick={() => handlePaymentMethodSelect('card')}
+                    variant="outline"
+                    className="w-full flex justify-between items-center h-auto py-3"
+                  >
+                    <div className="flex items-center">
+                      <CreditCard className="h-5 w-5 mr-3" />
+                      <span>Credit/Debit Card</span>
+                    </div>
+                    <span className="text-gray-400">→</span>
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => handlePaymentMethodSelect('upi')}
+                    variant="outline"
+                    className="w-full flex justify-between items-center h-auto py-3"
+                  >
+                    <div className="flex items-center">
+                      <Wallet className="h-5 w-5 mr-3" />
+                      <span>UPI</span>
+                    </div>
+                    <span className="text-gray-400">→</span>
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => handlePaymentMethodSelect('cod')}
+                    variant="outline"
+                    className="w-full flex justify-between items-center h-auto py-3"
+                  >
+                    <div className="flex items-center">
+                      <Banknote className="h-5 w-5 mr-3" />
+                      <span>Cash on Delivery</span>
+                    </div>
+                    <span className="text-gray-400">→</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          
+          {paymentStep === 'details' && paymentMethod === 'card' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex justify-between items-center">
+                  <span>Card Details</span>
+                  <Button variant="ghost" size="sm" onClick={handleGoBackToMethods}>
+                    Change
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Form {...cardForm}>
+                  <form onSubmit={handleCardSubmit} className="space-y-4">
+                    <FormField
+                      control={cardForm.control}
+                      name="cardName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name on Card</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="John Smith" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={cardForm.control}
+                      name="cardNumber"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Card Number</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="1234 5678 9012 3456" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={cardForm.control}
+                        name="expiryDate"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Expiry Date (MM/YY)</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="05/25" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <FormField
+                        control={cardForm.control}
+                        name="cvv"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>CVV</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="123" type="password" />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    
+                    <Button 
+                      type="submit" 
+                      className="w-full mt-6"
+                      disabled={processing}
+                    >
+                      Pay ₹{product.winningBid}
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          )}
+          
+          {paymentStep === 'details' && paymentMethod === 'upi' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex justify-between items-center">
+                  <span>UPI Payment</span>
+                  <Button variant="ghost" size="sm" onClick={handleGoBackToMethods}>
+                    Change
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Form {...upiForm}>
+                  <form onSubmit={handleUpiSubmit} className="space-y-4">
+                    <FormField
+                      control={upiForm.control}
+                      name="upiId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>UPI ID</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="yourname@upi" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <Button 
+                      type="submit" 
+                      className="w-full mt-6"
+                      disabled={processing}
+                    >
+                      Pay ₹{product.winningBid} with UPI
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          )}
+          
+          {paymentStep === 'details' && paymentMethod === 'cod' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex justify-between items-center">
+                  <span>Cash on Delivery</span>
+                  <Button variant="ghost" size="sm" onClick={handleGoBackToMethods}>
+                    Change
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center mb-6">
+                  <Banknote className="h-16 w-16 text-primary mx-auto mb-2" />
+                  <p>You will pay ₹{product.winningBid} at the time of delivery</p>
                 </div>
                 
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="upi" id="upi" />
-                  <Label htmlFor="upi" className="flex items-center">
-                    <Wallet className="h-4 w-4 mr-2" />
-                    UPI
-                  </Label>
-                </div>
-                
-                {paymentMethod === 'upi' && (
-                  <div className="pl-6 mt-2">
-                    <Label htmlFor="upiId">UPI ID</Label>
-                    <Input id="upiId" placeholder="username@upi" className="mt-1" />
-                  </div>
-                )}
-                
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="cod" id="cod" />
-                  <Label htmlFor="cod" className="flex items-center">
-                    <Banknote className="h-4 w-4 mr-2" />
-                    Cash on Delivery
-                  </Label>
-                </div>
-              </RadioGroup>
-              
-              <Button 
-                className="w-full mt-6" 
-                onClick={handlePayment}
-                disabled={processing}
-              >
-                {processing ? (
-                  <span className="flex items-center">
-                    <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-2"></div>
-                    Processing...
-                  </span>
-                ) : (
-                  <span>Complete Payment</span>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
+                <Button 
+                  onClick={handleCodPayment}
+                  className="w-full"
+                  disabled={processing}
+                >
+                  Place Order
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

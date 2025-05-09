@@ -13,6 +13,14 @@ interface PaymentIntentResponse {
   error?: string;
 }
 
+interface DeliveryAddress {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
 /**
  * Creates a payment intent using the Stripe API through our Supabase Edge Function
  */
@@ -51,21 +59,68 @@ export const recordPayment = async (
   productId: string,
   amount: number,
   paymentMethod: string,
+  deliveryAddress: DeliveryAddress,
   status: 'completed' | 'pending' | 'failed' = 'completed'
 ) => {
   try {
+    // Create a transaction ID
+    const transactionId = `TXN-${Math.floor(Math.random() * 1000000)}-${Date.now()}`;
+    
+    // Get product details for the receipt
+    const { data: productData, error: productError } = await supabase
+      .from('products')
+      .select(`
+        *,
+        farmer:farmer_id(name, id)
+      `)
+      .eq('id', productId)
+      .single();
+      
+    if (productError) throw productError;
+    
+    // Get buyer details
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    
+    if (!user) throw new Error("User not authenticated");
+    
+    // Create payment record in orders table
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        product_id: productId,
+        buyer_id: user.id,
+        amount,
+        payment_method: paymentMethod,
+        payment_status: status,
+        delivery_address: deliveryAddress,
+        transaction_id: transactionId,
+        payment_date: new Date().toISOString()
+      })
+      .select();
+      
+    if (orderError) throw orderError;
+    
     // Update the product status
-    const { data, error } = await supabase
+    const { error: updateError } = await supabase
       .from('products')
       .update({
         paid: status === 'completed',
+        available: false,
         updated_at: new Date().toISOString()
       })
       .eq('id', productId);
 
-    if (error) throw error;
+    if (updateError) throw updateError;
     
-    return { success: true, data };
+    return { 
+      success: true, 
+      data: {
+        order: orderData[0],
+        transactionId,
+        product: productData
+      } 
+    };
   } catch (error: any) {
     console.error('Error recording payment:', error);
     return { success: false, error: error.message };
@@ -77,14 +132,16 @@ export const recordPayment = async (
  */
 export const processCodPayment = async (
   productId: string,
-  amount: number
+  amount: number,
+  deliveryAddress: DeliveryAddress
 ) => {
   try {
-    // For COD, we just record the payment as pending
+    // For COD, we record the payment as pending
     const result = await recordPayment(
       productId,
       amount,
       'cod',
+      deliveryAddress,
       'pending'
     );
     
@@ -92,7 +149,8 @@ export const processCodPayment = async (
       success: result.success, 
       message: result.success ? 
         'Cash on Delivery payment scheduled successfully' : 
-        'Failed to schedule Cash on Delivery payment' 
+        'Failed to schedule Cash on Delivery payment',
+      data: result.data
     };
   } catch (error: any) {
     console.error('Error processing COD payment:', error);
@@ -106,16 +164,22 @@ export const processCodPayment = async (
 export const processUpiPayment = async (
   productId: string,
   amount: number,
+  deliveryAddress: DeliveryAddress,
   upiId: string
 ) => {
-  // In a real app, this would initiate a UPI payment flow
-  // For this demo, we'll just simulate success
   try {
+    // Verify UPI ID
+    const isValidUpi = upiId.includes('@');
+    if (!isValidUpi) {
+      return { success: false, message: 'Invalid UPI ID format' };
+    }
+    
     // Record the payment
     const result = await recordPayment(
       productId,
       amount,
       'upi',
+      deliveryAddress,
       'completed'
     );
     
@@ -123,10 +187,46 @@ export const processUpiPayment = async (
       success: result.success, 
       message: result.success ? 
         'UPI payment processed successfully' : 
-        'Failed to process UPI payment' 
+        'Failed to process UPI payment',
+      data: result.data
     };
   } catch (error: any) {
     console.error('Error processing UPI payment:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+/**
+ * Process card payment
+ */
+export const processCardPayment = async (
+  productId: string,
+  amount: number,
+  deliveryAddress: DeliveryAddress,
+  cardDetails: any
+) => {
+  try {
+    // In a real app, this would use Stripe to process the card
+    // For this demo, we'll simulate a successful card payment
+    
+    // Record the payment
+    const result = await recordPayment(
+      productId,
+      amount,
+      'card',
+      deliveryAddress,
+      'completed'
+    );
+    
+    return { 
+      success: result.success, 
+      message: result.success ? 
+        'Card payment processed successfully' : 
+        'Failed to process card payment',
+      data: result.data
+    };
+  } catch (error: any) {
+    console.error('Error processing card payment:', error);
     return { success: false, message: error.message };
   }
 };
@@ -138,7 +238,7 @@ export const processPayment = async (
   amount: number,
   productId: string,
   paymentMethod: 'cod' | 'upi' | 'card',
-  deliveryAddress: any,
+  deliveryAddress: DeliveryAddress,
   upiId?: string
 ) => {
   try {
@@ -146,25 +246,37 @@ export const processPayment = async (
     
     switch (paymentMethod) {
       case 'cod':
-        result = await processCodPayment(productId, amount);
+        result = await processCodPayment(productId, amount, deliveryAddress);
         break;
       case 'upi':
         if (!upiId) {
           return { success: false, message: 'UPI ID is required for UPI payments' };
         }
-        result = await processUpiPayment(productId, amount, upiId);
+        result = await processUpiPayment(productId, amount, deliveryAddress, upiId);
         break;
       case 'card':
-        // For demo purposes, we'll simulate a successful card payment
-        result = await recordPayment(productId, amount, 'card', 'completed');
-        return { 
-          success: result.success, 
-          message: result.success ? 
-            'Card payment processed successfully' : 
-            'Failed to process card payment' 
-        };
+        result = await processCardPayment(productId, amount, deliveryAddress, {});
+        break;
       default:
         return { success: false, message: 'Invalid payment method' };
+    }
+    
+    // Generate and return invoice data
+    if (result.success && result.data) {
+      const invoiceData = {
+        transactionId: result.data.transactionId,
+        productName: result.data.product.name,
+        amount: amount,
+        paymentMethod: paymentMethod,
+        paymentDate: new Date().toISOString(),
+        farmerName: result.data.product.farmer?.name || 'Unknown Farmer',
+        buyerAddress: deliveryAddress
+      };
+      
+      return {
+        ...result,
+        invoice: invoiceData
+      };
     }
     
     return result;
@@ -189,6 +301,66 @@ export const markProductAsPaid = async (productId: string) => {
     return { success: true, data };
   } catch (error: any) {
     console.error('Error marking product as paid:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Generate an invoice for a completed payment
+ */
+export const generateInvoice = async (orderId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        product:product_id(
+          name, 
+          quantity, 
+          unit, 
+          description,
+          farmer:farmer_id(name, id)
+        ),
+        buyer:buyer_id(name, id)
+      `)
+      .eq('id', orderId)
+      .single();
+      
+    if (error) throw error;
+    
+    if (!data) {
+      return { success: false, error: 'Order not found' };
+    }
+    
+    // Format the invoice data
+    const invoiceData = {
+      invoiceNumber: `INV-${orderId.slice(0, 8)}`,
+      orderId: orderId,
+      transactionId: data.transaction_id,
+      date: new Date(data.payment_date).toLocaleDateString(),
+      buyerDetails: {
+        name: data.buyer?.name || 'Unknown Buyer',
+        id: data.buyer?.id
+      },
+      sellerDetails: {
+        name: data.product?.farmer?.name || 'Unknown Seller',
+        id: data.product?.farmer?.id
+      },
+      productDetails: {
+        name: data.product?.name || 'Unknown Product',
+        quantity: data.product?.quantity || 0,
+        unit: data.product?.unit || '',
+        description: data.product?.description || ''
+      },
+      amount: data.amount,
+      paymentMethod: data.payment_method,
+      paymentStatus: data.payment_status,
+      deliveryAddress: data.delivery_address
+    };
+    
+    return { success: true, data: invoiceData };
+  } catch (error: any) {
+    console.error('Error generating invoice:', error);
     return { success: false, error: error.message };
   }
 };

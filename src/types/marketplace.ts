@@ -60,6 +60,8 @@ export interface Order {
     state: string;
     postalCode: string;
   };
+  transaction_id?: string;
+  payment_date?: string;
   created_at: string;
 }
 
@@ -74,4 +76,5 @@ export interface Notification {
   bidder_id?: string;
   bidder_name?: string;
   bid_amount?: number;
+  farmer_id?: string;
 }

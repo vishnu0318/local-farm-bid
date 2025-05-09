@@ -88,6 +88,29 @@ export const useBidsData = () => {
       )
       .subscribe();
     
+    // Also listen for product status changes (paid, unavailable)
+    const productChannel = supabase
+      .channel('public:products')
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'products'
+        }, 
+        (payload: any) => {
+          const updatedProduct = payload.new as { id?: string; paid?: boolean; available?: boolean };
+          
+          // Check if this is a product the user has bid on
+          const isUserProduct = bids.some(bid => bid.product_id === updatedProduct.id);
+          
+          // Refresh data when a product the user bid on is updated
+          if (isUserProduct && (updatedProduct.paid === true || updatedProduct.available === false)) {
+            fetchMyBids();
+          }
+        }
+      )
+      .subscribe();
+    
     // Refresh bids status periodically
     const intervalId = setInterval(() => {
       setBids(prevBids => prevBids.map(bid => {
@@ -118,6 +141,7 @@ export const useBidsData = () => {
     return () => {
       clearInterval(intervalId);
       supabase.removeChannel(channel);
+      supabase.removeChannel(productChannel);
     };
   }, [user]);
 
@@ -126,8 +150,15 @@ export const useBidsData = () => {
     const now = new Date();
     const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
     const isEnded = bidEnd && now > bidEnd;
+    const isPaid = bid.product?.paid === true;
     
-    if (isEnded) {
+    if (isPaid) {
+      if (bid.product?.highest_bidder_id === user?.id) {
+        return { status: 'won', label: 'Purchased' };
+      } else {
+        return { status: 'lost', label: 'Sold' };
+      }
+    } else if (isEnded) {
       // Auction has ended
       if (bid.product?.highest_bidder_id === user?.id) {
         return { status: 'won', label: 'Won' };
