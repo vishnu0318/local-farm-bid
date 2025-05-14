@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { loadStripe } from '@stripe/stripe-js';
-import { IndianRupee, CreditCard, Wallet, Banknote, Check } from 'lucide-react';
+import { IndianRupee, CreditCard, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Product, DeliveryAddress } from '@/types/marketplace';
 import { processPayment } from '@/services/paymentService';
@@ -71,12 +70,6 @@ const PaymentDetails = () => {
     }
   });
 
-  const upiForm = useForm({
-    resolver: zodResolver(upiFormSchema),
-    defaultValues: {
-      upiId: '',
-    }
-  });
 
   // Load product details
   useEffect(() => {
@@ -175,7 +168,8 @@ const PaymentDetails = () => {
         amount,
         productId as string,
         'card',
-        deliveryAddress
+        deliveryAddress,
+        // cardDetails:cardForm
       );
       
       if (!result.success) {
@@ -185,10 +179,6 @@ const PaymentDetails = () => {
       setPaymentStep('success');
       toast.success("Payment successful!");
       
-      // Navigate after a short delay to show success state
-      setTimeout(() => {
-        navigate(`/buyer/product/${product.id}`);
-      }, 2000);
       
     } catch (error: any) {
       console.error("Payment error:", error);
@@ -199,105 +189,8 @@ const PaymentDetails = () => {
     }
   });
 
-  // Process UPI payment
-  const handleUpiSubmit = upiForm.handleSubmit(async (data) => {
-    if (!product || !user || !deliveryAddress.addressLine1 || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.postalCode) {
-      toast.error("Please complete all delivery address fields");
-      return;
-    }
-    
-    setProcessing(true);
-    
-    try {
-      // Get the payment amount from the winning bid
-      const amount = product.winningBid;
-      
-      if (!amount) {
-        throw new Error('Invalid bid amount');
-      }
 
-      setPaymentStep('processing');
-      
-      // Process the payment after a brief delay to show the processing state
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Process the payment
-      const result = await processPayment(
-        amount,
-        productId as string,
-        'upi',
-        deliveryAddress,
-        data.upiId
-      );
-      
-      if (!result.success) {
-        throw new Error(result.message || 'UPI Payment failed');
-      }
-      
-      setPaymentStep('success');
-      toast.success("UPI Payment successful!");
-      
-      // Navigate after a short delay to show success state
-      setTimeout(() => {
-        navigate(`/buyer/product/${product.id}`);
-      }, 2000);
-      
-    } catch (error: any) {
-      console.error("UPI Payment error:", error);
-      toast.error(error.message || "UPI Payment failed. Please try again.");
-      setPaymentStep('details');
-    } finally {
-      setProcessing(false);
-    }
-  });
-
-  // Process COD payment
-  const handleCodPayment = async () => {
-    if (!product || !user || !deliveryAddress.addressLine1 || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.postalCode) {
-      toast.error("Please complete all delivery address fields");
-      return;
-    }
-    
-    setProcessing(true);
-    
-    try {
-      const amount = product.winningBid;
-      
-      if (!amount) {
-        throw new Error('Invalid bid amount');
-      }
-
-      setPaymentStep('processing');
-      
-      // Process the payment
-      const result = await processPayment(
-        amount,
-        productId as string,
-        'cod',
-        deliveryAddress
-      );
-      
-      if (!result.success) {
-        throw new Error(result.message || 'Failed to place COD order');
-      }
-      
-      setPaymentStep('success');
-      toast.success("Cash on Delivery order placed successfully!");
-      
-      // Navigate after a short delay to show success state
-      setTimeout(() => {
-        navigate(`/buyer/product/${product.id}`);
-      }, 2000);
-      
-    } catch (error: any) {
-      console.error("COD error:", error);
-      toast.error(error.message || "Failed to place Cash on Delivery order.");
-      setPaymentStep('details');
-    } finally {
-      setProcessing(false);
-    }
-  };
-
+ 
   // Go back to payment method selection
   const handleGoBackToMethods = () => {
     setPaymentStep('method');
@@ -477,30 +370,6 @@ const PaymentDetails = () => {
                     </div>
                     <span className="text-gray-400">→</span>
                   </Button>
-                  
-                  <Button 
-                    onClick={() => handlePaymentMethodSelect('upi')}
-                    variant="outline"
-                    className="w-full flex justify-between items-center h-auto py-3"
-                  >
-                    <div className="flex items-center">
-                      <Wallet className="h-5 w-5 mr-3" />
-                      <span>UPI</span>
-                    </div>
-                    <span className="text-gray-400">→</span>
-                  </Button>
-                  
-                  <Button 
-                    onClick={() => handlePaymentMethodSelect('cod')}
-                    variant="outline"
-                    className="w-full flex justify-between items-center h-auto py-3"
-                  >
-                    <div className="flex items-center">
-                      <Banknote className="h-5 w-5 mr-3" />
-                      <span>Cash on Delivery</span>
-                    </div>
-                    <span className="text-gray-400">→</span>
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -586,73 +455,6 @@ const PaymentDetails = () => {
                     </Button>
                   </form>
                 </Form>
-              </CardContent>
-            </Card>
-          )}
-          
-          {paymentStep === 'details' && paymentMethod === 'upi' && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span>UPI Payment</span>
-                  <Button variant="ghost" size="sm" onClick={handleGoBackToMethods}>
-                    Change
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Form {...upiForm}>
-                  <form onSubmit={handleUpiSubmit} className="space-y-4">
-                    <FormField
-                      control={upiForm.control}
-                      name="upiId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>UPI ID</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="yourname@upi" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <Button 
-                      type="submit" 
-                      className="w-full mt-6"
-                      disabled={processing}
-                    >
-                      Pay ₹{product.winningBid} with UPI
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          )}
-          
-          {paymentStep === 'details' && paymentMethod === 'cod' && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span>Cash on Delivery</span>
-                  <Button variant="ghost" size="sm" onClick={handleGoBackToMethods}>
-                    Change
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center mb-6">
-                  <Banknote className="h-16 w-16 text-primary mx-auto mb-2" />
-                  <p>You will pay ₹{product.winningBid} at the time of delivery</p>
-                </div>
-                
-                <Button 
-                  onClick={handleCodPayment}
-                  className="w-full"
-                  disabled={processing}
-                >
-                  Place Order
-                </Button>
               </CardContent>
             </Card>
           )}

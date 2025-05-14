@@ -122,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setProfile(null);
     }
   };
-
+  console.log(profile)
   const login = async (email: string, password: string, role: UserRole): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
     

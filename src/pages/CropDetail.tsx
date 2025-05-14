@@ -29,7 +29,6 @@ const CropDetail = () => {
   const { currentLocation, calculateDistance } = useLocation();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
-
   const [product, setProduct] = useState<Product | null>(null);
   const [productBids, setProductBids] = useState<Bid[]>([]);
   const [loading, setLoading] = useState(true);

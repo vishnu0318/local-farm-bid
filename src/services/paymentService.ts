@@ -56,6 +56,11 @@ export const recordPayment = async (
   status: 'completed' | 'pending' | 'failed' = 'completed'
 ) => {
   try {
+    // Ensure valid parameters
+    if (!productId || amount <= 0 || !deliveryAddress) {
+      throw new Error("Missing or invalid parameters for payment processing");
+    }
+
     // Create a transaction ID
     const transactionId = `TXN-${Math.floor(Math.random() * 1000000)}-${Date.now()}`;
     
@@ -69,45 +74,40 @@ export const recordPayment = async (
       .eq('id', productId)
       .single();
       
-    if (productError) throw productError;
+    if (productError) throw new Error(`Error fetching product: ${productError.message}`);
     
     // Get buyer details
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError) throw userError;
+    if (userError) throw new Error(`Error fetching user: ${userError.message}`);
     
     if (!user) throw new Error("User not authenticated");
     
-    try {
-      // Convert DeliveryAddress to a JSON object for storage
-      const addressObject = {
-        addressLine1: deliveryAddress.addressLine1,
-        addressLine2: deliveryAddress.addressLine2 || null,
-        city: deliveryAddress.city,
-        state: deliveryAddress.state || '',
-        postalCode: deliveryAddress.postalCode
-      };
+    // Convert DeliveryAddress to a JSON object for storage
+    const addressObject = {
+      addressLine1: deliveryAddress.addressLine1,
+      addressLine2: deliveryAddress.addressLine2 || null,
+      city: deliveryAddress.city,
+      state: deliveryAddress.state || '',
+      postalCode: deliveryAddress.postalCode
+    };
 
-      // Create payment record in orders table
-      const { data: orderData, error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          product_id: productId,
-          buyer_id: user.id,
-          amount,
-          payment_method: paymentMethod,
-          payment_status: status,
-          delivery_address: addressObject,
-          transaction_id: transactionId,
-          payment_date: new Date().toISOString()
-        })
-        .select();
+    // Create payment record in orders table
+    const { data: orderData, error: orderError } = await supabase
+      .from('orders')
+      .insert({
+        product_id: productId,
+        buyer_id: user.id,
+        amount,
+        payment_method: paymentMethod,
+        payment_status: status,
+        delivery_address: addressObject,
+        transaction_id: transactionId,
+        payment_date: new Date().toISOString()
+      })
+      .select();
         
-      if (orderError) throw orderError;
-    } catch (orderError) {
-      console.error("Error creating order record:", orderError);
-      // Continue with the payment process even if order creation fails
-    }
-    
+    if (orderError) throw new Error(`Error creating order record: ${orderError.message}`);
+
     // Update the product status
     const { error: updateError } = await supabase
       .from('products')
@@ -118,7 +118,7 @@ export const recordPayment = async (
       })
       .eq('id', productId);
 
-    if (updateError) throw updateError;
+    if (updateError) throw new Error(`Error updating product status: ${updateError.message}`);
     
     return { 
       success: true, 
@@ -133,78 +133,7 @@ export const recordPayment = async (
   }
 };
 
-/**
- * Process Cash on Delivery payment
- */
-export const processCodPayment = async (
-  productId: string,
-  amount: number,
-  deliveryAddress: DeliveryAddress
-) => {
-  try {
-    // For COD, we record the payment as pending
-    const result = await recordPayment(
-      productId,
-      amount,
-      'cod',
-      deliveryAddress,
-      'pending'
-    );
-    
-    return { 
-      success: result.success, 
-      message: result.success ? 
-        'Cash on Delivery payment scheduled successfully' : 
-        'Failed to schedule Cash on Delivery payment',
-      data: result.data
-    };
-  } catch (error: any) {
-    console.error('Error processing COD payment:', error);
-    return { success: false, message: error.message };
-  }
-};
 
-/**
- * Process UPI payment
- */
-export const processUpiPayment = async (
-  productId: string,
-  amount: number,
-  deliveryAddress: DeliveryAddress,
-  upiId: string
-) => {
-  try {
-    // Verify UPI ID
-    const isValidUpi = upiId.includes('@');
-    if (!isValidUpi) {
-      return { success: false, message: 'Invalid UPI ID format' };
-    }
-    
-    // Record the payment
-    const result = await recordPayment(
-      productId,
-      amount,
-      'upi',
-      deliveryAddress,
-      'completed'
-    );
-    
-    return { 
-      success: result.success, 
-      message: result.success ? 
-        'UPI payment processed successfully' : 
-        'Failed to process UPI payment',
-      data: result.data
-    };
-  } catch (error: any) {
-    console.error('Error processing UPI payment:', error);
-    return { success: false, message: error.message };
-  }
-};
-
-/**
- * Process card payment
- */
 export const processCardPayment = async (
   productId: string,
   amount: number,
@@ -251,15 +180,6 @@ export const processPayment = async (
     let result;
     
     switch (paymentMethod) {
-      case 'cod':
-        result = await processCodPayment(productId, amount, deliveryAddress);
-        break;
-      case 'upi':
-        if (!upiId) {
-          return { success: false, message: 'UPI ID is required for UPI payments' };
-        }
-        result = await processUpiPayment(productId, amount, deliveryAddress, upiId);
-        break;
       case 'card':
         result = await processCardPayment(productId, amount, deliveryAddress, {});
         break;

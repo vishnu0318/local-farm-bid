@@ -124,6 +124,7 @@ export const addProduct = async (product: Omit<Product, 'id' | 'created_at' | 'u
     }
     
     return { success: true, id: data[0].id };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('Error adding product:', error);
     return { success: false, error: error.message || "An unexpected error occurred" };
@@ -143,6 +144,7 @@ export const updateProduct = async (id: string, product: Partial<Product>): Prom
     }
     
     return { success: true };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error('Error updating product:', error);
     return { success: false, error: error.message || "An unexpected error occurred" };
