@@ -16,15 +16,13 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import jsPDF from "jspdf";
 
 // Define a type that extends Product to include winningBid property
 interface ProductWithWinningBid extends Product {
   winningBid?: number;
   bids?: { amount: number; bidder_id: string }[];
 }
-
-// Initialize Stripe
-const stripePromise = loadStripe("pk_test_51OLPCESIYS9RARqbGN1mSEVAD4Dc2njuu5riGLFQPxV1qVjJ9SeBBAAzwkZLEjtEr3HpivbvLfWLQFtibQyMvTWq00ZC7FZu82");
 
 // Form validation schemas
 const cardFormSchema = z.object({
@@ -34,11 +32,6 @@ const cardFormSchema = z.object({
   cvv: z.string().length(3, "CVV must be 3 digits").regex(/^\d+$/, "CVV must contain only digits"),
 });
 
-const upiFormSchema = z.object({
-  upiId: z.string()
-    .min(5, "Valid UPI ID required")
-    .refine((val) => val.includes('@'), { message: "UPI ID must contain @" }),
-});
 
 const PaymentDetails = () => {
   const { user } = useAuth();
@@ -58,6 +51,10 @@ const PaymentDetails = () => {
     state: '',
     postalCode: ''
   });
+
+  const [farmerId, setFarmerId] = useState("");
+  const [farmerName, setFarmerName] = useState('');
+  const [transactionId,setTransactionId] = useState("");
 
   // Forms for different payment methods
   const cardForm = useForm({
@@ -98,18 +95,21 @@ const PaymentDetails = () => {
           // Sort bids by amount (descending)
           const sortedBids = [...productData.bids].sort((a, b) => b.amount - a.amount);
           const highestBid = sortedBids[0];
-          
+
           if (highestBid.bidder_id !== user?.id) {
             toast.error("You are not the highest bidder for this product");
             navigate('/buyer/my-bids');
             return;
           }
-          
+
           // Set the product with winning bid amount using spread operator
           setProduct({
             ...productData,
             winningBid: highestBid.amount
           });
+
+          setFarmerId(productData?.farmer_id);
+
         } else {
           toast.error("No bids found for this product");
           navigate('/buyer/my-bids');
@@ -125,6 +125,37 @@ const PaymentDetails = () => {
 
     fetchProduct();
   }, [productId, user?.id, navigate]);
+
+
+
+  useEffect(() => {
+    const fetchFarmerName = async () => {
+      console.log("Looking for farmer with ID:", farmerId);
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('name')
+      .eq('id', farmerId.trim()); // just in case there's whitespace
+
+    if (error) {
+      console.error("Supabase fetch error:", error.message);
+      return;
+    }
+
+    if (data.length === 1) {
+      setFarmerName(data[0].name);
+    } else if (data.length === 0) {
+      console.warn("❌ No farmer found for ID:", farmerId);
+    } else {
+      console.warn("⚠️ Multiple farmers found (unexpected):", data);
+    }
+  };
+
+  if (farmerId) fetchFarmerName();
+  }, [farmerId]);
+
+
+
 
   // Handle payment method selection
   const handlePaymentMethodSelect = (method: string) => {
@@ -147,22 +178,22 @@ const PaymentDetails = () => {
       toast.error("Please complete all delivery address fields");
       return;
     }
-    
+
     setProcessing(true);
-    
+
     try {
       // Get the payment amount from the winning bid
       const amount = product.winningBid;
-      
+
       if (!amount) {
         throw new Error('Invalid bid amount');
       }
 
       setPaymentStep('processing');
-      
+
       // Process the payment after a brief delay to show the processing state
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       // Process the payment
       const result = await processPayment(
         amount,
@@ -171,15 +202,15 @@ const PaymentDetails = () => {
         deliveryAddress,
         // cardDetails:cardForm
       );
-      
+
       if (!result.success) {
         throw new Error(result.message || 'Payment failed');
       }
-      
+
       setPaymentStep('success');
       toast.success("Payment successful!");
-      
-      
+
+
     } catch (error: any) {
       console.error("Payment error:", error);
       toast.error(error.message || "Payment failed. Please try again.");
@@ -190,7 +221,7 @@ const PaymentDetails = () => {
   });
 
 
- 
+
   // Go back to payment method selection
   const handleGoBackToMethods = () => {
     setPaymentStep('method');
@@ -212,6 +243,23 @@ const PaymentDetails = () => {
     );
   }
 
+  // function to download pdf 
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
+
+    doc.setFontSize(16);
+    doc.text("Payment Receipt", 20, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Buyer Name: ${user.name}`, 20, 40);
+    doc.text(`Product: ${product.name}`, 20, 60);
+    doc.text(`Price: ₹${product.winningBid}`, 20, 70);
+    doc.text(`Payment Method: Card`, 20, 80);
+    doc.text(`Payment Status: Successful`, 20, 90);
+
+    doc.save("order-receipt.pdf");
+  };
+
   // Render success state
   if (paymentStep === 'success') {
     return (
@@ -224,7 +272,7 @@ const PaymentDetails = () => {
           Your payment of ₹{product.winningBid} has been processed successfully.
         </p>
         <div className="flex justify-center">
-          <Button onClick={() => navigate(`/buyer/product/${product.id}`)}>
+          <Button onClick={handleDownloadPDF}>
             View Order Details
           </Button>
         </div>
@@ -250,7 +298,7 @@ const PaymentDetails = () => {
   return (
     <div className="container max-w-4xl mx-auto py-8">
       <h1 className="text-3xl font-bold mb-8">Complete Your Purchase</h1>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Order summary */}
         <div className="md:col-span-2">
@@ -272,9 +320,9 @@ const PaymentDetails = () => {
                     <span>{product.winningBid}</span>
                   </div>
                 </div>
-                
+
                 <Separator />
-                
+
                 <div className="flex justify-between font-semibold">
                   <span>Total</span>
                   <div className="flex items-center">
@@ -296,8 +344,8 @@ const PaymentDetails = () => {
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="addressLine1">Address Line</Label>
-                    <Input 
-                      id="addressLine1" 
+                    <Input
+                      id="addressLine1"
                       name="addressLine1"
                       value={deliveryAddress.addressLine1}
                       onChange={handleAddressChange}
@@ -309,8 +357,8 @@ const PaymentDetails = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="city">City</Label>
-                      <Input 
-                        id="city" 
+                      <Input
+                        id="city"
                         name="city"
                         value={deliveryAddress.city}
                         onChange={handleAddressChange}
@@ -321,8 +369,8 @@ const PaymentDetails = () => {
                     </div>
                     <div>
                       <Label htmlFor="state">State</Label>
-                      <Input 
-                        id="state" 
+                      <Input
+                        id="state"
                         name="state"
                         value={deliveryAddress.state}
                         onChange={handleAddressChange}
@@ -334,8 +382,8 @@ const PaymentDetails = () => {
                   </div>
                   <div>
                     <Label htmlFor="postalCode">Postal Code</Label>
-                    <Input 
-                      id="postalCode" 
+                    <Input
+                      id="postalCode"
                       name="postalCode"
                       value={deliveryAddress.postalCode}
                       onChange={handleAddressChange}
@@ -349,7 +397,7 @@ const PaymentDetails = () => {
             </Card>
           )}
         </div>
-        
+
         {/* Payment methods */}
         <div>
           {paymentStep === 'method' && (
@@ -359,7 +407,7 @@ const PaymentDetails = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <Button 
+                  <Button
                     onClick={() => handlePaymentMethodSelect('card')}
                     variant="outline"
                     className="w-full flex justify-between items-center h-auto py-3"
@@ -374,7 +422,7 @@ const PaymentDetails = () => {
               </CardContent>
             </Card>
           )}
-          
+
           {paymentStep === 'details' && paymentMethod === 'card' && (
             <Card>
               <CardHeader>
@@ -401,7 +449,7 @@ const PaymentDetails = () => {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={cardForm.control}
                       name="cardNumber"
@@ -415,7 +463,7 @@ const PaymentDetails = () => {
                         </FormItem>
                       )}
                     />
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={cardForm.control}
@@ -430,7 +478,7 @@ const PaymentDetails = () => {
                           </FormItem>
                         )}
                       />
-                      
+
                       <FormField
                         control={cardForm.control}
                         name="cvv"
@@ -445,9 +493,9 @@ const PaymentDetails = () => {
                         )}
                       />
                     </div>
-                    
-                    <Button 
-                      type="submit" 
+
+                    <Button
+                      type="submit"
                       className="w-full mt-6"
                       disabled={processing}
                     >
