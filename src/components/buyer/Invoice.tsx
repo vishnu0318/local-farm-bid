@@ -1,9 +1,9 @@
-
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { IndianRupee, FileText, Calendar, CreditCard, Package, MapPin, User, Printer } from 'lucide-react';
+import { IndianRupee, FileText, Calendar, CreditCard, Package, MapPin, User, download } from 'lucide-react';
+import jsPDF from 'jspdf';
 
 interface InvoiceProps {
   invoiceData: {
@@ -42,49 +42,71 @@ const Invoice: React.FC<InvoiceProps> = ({ invoiceData }) => {
     window.print();
   };
 
-  const handleDownload = () => {
-    // Create a simple PDF-like content for download
-    const invoiceContent = `
-FARMCONNECT INVOICE
-==================
-
-Invoice Number: ${invoiceData.invoiceNumber}
-Order ID: ${invoiceData.orderId}
-Transaction ID: ${invoiceData.transactionId}
-Date: ${invoiceData.date}
-
-BUYER DETAILS:
-Name: ${invoiceData.buyerDetails.name}
-
-SELLER DETAILS:
-Name: ${invoiceData.sellerDetails.name}
-
-PRODUCT DETAILS:
-${invoiceData.productDetails.name}
-Quantity: ${invoiceData.productDetails.quantity} ${invoiceData.productDetails.unit}
-Description: ${invoiceData.productDetails.description}
-
-PAYMENT DETAILS:
-Amount: ₹${invoiceData.amount}
-Payment Method: ${invoiceData.paymentMethod.toUpperCase()}
-Status: ${invoiceData.paymentStatus.toUpperCase()}
-
-DELIVERY ADDRESS:
-${invoiceData.deliveryAddress.addressLine1}
-${invoiceData.deliveryAddress.city}, ${invoiceData.deliveryAddress.state} - ${invoiceData.deliveryAddress.postalCode}
-
-Thank you for your business with FarmConnect!
-    `;
+  const handleDownloadPDF = () => {
+    const doc = new jsPDF();
     
-    const blob = new Blob([invoiceContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `FarmConnect-Invoice-${invoiceData.invoiceNumber}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Set up the PDF with professional styling
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FARMCONNECT INVOICE', 20, 30);
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Invoice Number: ${invoiceData.invoiceNumber}`, 20, 50);
+    doc.text(`Date: ${invoiceData.date}`, 20, 60);
+    
+    // Buyer Details
+    doc.setFont('helvetica', 'bold');
+    doc.text('BILL TO:', 20, 80);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${invoiceData.buyerDetails.name}`, 20, 90);
+    doc.text(`${invoiceData.deliveryAddress.addressLine1}`, 20, 100);
+    doc.text(`${invoiceData.deliveryAddress.city}, ${invoiceData.deliveryAddress.state}`, 20, 110);
+    doc.text(`${invoiceData.deliveryAddress.postalCode}`, 20, 120);
+    
+    // Invoice Details
+    doc.setFont('helvetica', 'bold');
+    doc.text('INVOICE DETAILS:', 120, 80);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Order ID: ${invoiceData.orderId.slice(0, 8)}`, 120, 90);
+    doc.text(`Transaction ID: ${invoiceData.transactionId}`, 120, 100);
+    doc.text(`Payment Method: ${invoiceData.paymentMethod.toUpperCase()}`, 120, 110);
+    doc.text(`Status: PAYMENT COMPLETED`, 120, 120);
+    
+    // Product Details
+    doc.setFont('helvetica', 'bold');
+    doc.text('PRODUCT DETAILS:', 20, 150);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Product: ${invoiceData.productDetails.name}`, 20, 160);
+    doc.text(`Quantity: ${invoiceData.productDetails.quantity} ${invoiceData.productDetails.unit}`, 20, 170);
+    doc.text(`Description: ${invoiceData.productDetails.description}`, 20, 180);
+    
+    // Payment Summary
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAYMENT SUMMARY:', 20, 200);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Subtotal: ₹${invoiceData.amount.toLocaleString()}`, 20, 210);
+    doc.text('Delivery Charges: FREE', 20, 220);
+    doc.text('Tax (GST): Inclusive', 20, 230);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text(`Total Amount: ₹${invoiceData.amount.toLocaleString()}`, 20, 250);
+    
+    // Seller Information
+    doc.setFontSize(12);
+    doc.text('SELLER INFORMATION:', 20, 270);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Farmer Name: ${invoiceData.sellerDetails.name}`, 20, 280);
+    
+    // Footer
+    doc.setFontSize(10);
+    doc.text('Thank you for choosing FarmConnect! 🌱', 20, 300);
+    doc.text('Supporting local farmers and promoting sustainable agriculture.', 20, 310);
+    doc.text('For queries: support@farmconnect.com', 20, 320);
+    
+    // Save the PDF
+    doc.save(`FarmConnect-Invoice-${invoiceData.invoiceNumber}.pdf`);
   };
 
   const getPaymentMethodIcon = (method: string) => {
@@ -105,12 +127,12 @@ Thank you for your business with FarmConnect!
       {/* Header actions - visible only in screen mode */}
       <div className="flex justify-end p-4 bg-gray-50 print:hidden">
         <Button variant="outline" className="mr-2" onClick={handlePrint}>
-          <Printer className="h-4 w-4 mr-2" />
+          <FileText className="h-4 w-4 mr-2" />
           Print
         </Button>
-        <Button variant="default" onClick={handleDownload}>
-          <FileText className="h-4 w-4 mr-2" />
-          Download
+        <Button variant="default" onClick={handleDownloadPDF}>
+          <download className="h-4 w-4 mr-2" />
+          Download PDF
         </Button>
       </div>
 
@@ -190,7 +212,7 @@ Thank you for your business with FarmConnect!
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
                   <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
-                    {invoiceData.paymentStatus.toUpperCase()}
+                    PAYMENT COMPLETED
                   </span>
                 </div>
               </div>

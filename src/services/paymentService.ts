@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { DeliveryAddress } from "@/types/marketplace";
 
@@ -107,11 +108,11 @@ export const recordPayment = async (
         
     if (orderError) throw new Error(`Error creating order record: ${orderError.message}`);
 
-    // Update the product status
+    // Update the product status - mark as paid and unavailable
     const { error: updateError } = await supabase
       .from('products')
       .update({
-        paid: status === 'completed',
+        paid: true,
         available: false,
         updated_at: new Date().toISOString()
       })
@@ -322,7 +323,7 @@ export const generateInvoice = async (orderId: string) => {
       },
       amount: data.amount,
       paymentMethod: data.payment_method,
-      paymentStatus: data.payment_status,
+      paymentStatus: 'completed', // Always show as completed for invoices
       deliveryAddress: data.delivery_address
     };
     

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
@@ -16,6 +15,7 @@ import { Calendar as CalendarIcon, Clock, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORIES } from '@/constants/productCategories';
 import { addProduct, updateProduct } from '@/services/productService';
+import ImageUpload from '@/components/farmer/ImageUpload';
 
 const AddProduct = () => {
   const navigate = useNavigate();
@@ -97,6 +97,13 @@ const AddProduct = () => {
     setFormData(prev => ({
       ...prev,
       [name]: value
+    }));
+  };
+
+  const handleImageSelect = (imageUrl: string) => {
+    setFormData(prev => ({
+      ...prev,
+      imageUrl: imageUrl
     }));
   };
 
@@ -368,6 +375,15 @@ const AddProduct = () => {
                     onChange={handleTimeChange}
                   />
                 </div>
+              </div>
+
+              {/* Image Upload - Replace the imageUrl input */}
+              <div className="md:col-span-2">
+                <ImageUpload
+                  onImageSelect={handleImageSelect}
+                  currentImage={formData.imageUrl}
+                  label="Product Image"
+                />
               </div>
             </div>
 

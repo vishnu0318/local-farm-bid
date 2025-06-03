@@ -1,8 +1,8 @@
 
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import ImageUpload from '@/components/farmer/ImageUpload';
 
 interface ProfilePhotoProps {
   profileImage: string;
@@ -10,6 +10,14 @@ interface ProfilePhotoProps {
 }
 
 const ProfilePhoto = ({ profileImage, name }: ProfilePhotoProps) => {
+  const [currentImage, setCurrentImage] = useState(profileImage);
+
+  const handleImageSelect = (imageUrl: string) => {
+    setCurrentImage(imageUrl);
+    // Here you would typically save to the backend
+    console.log('New profile image:', imageUrl);
+  };
+
   return (
     <Card className="md:col-span-1">
       <CardHeader>
@@ -17,10 +25,17 @@ const ProfilePhoto = ({ profileImage, name }: ProfilePhotoProps) => {
       </CardHeader>
       <CardContent className="flex flex-col items-center">
         <Avatar className="h-40 w-40 mb-4">
-          <AvatarImage src={profileImage} alt={name} />
+          <AvatarImage src={currentImage} alt={name} />
           <AvatarFallback>{name.charAt(0)}</AvatarFallback>
         </Avatar>
-        <Button variant="outline" className="w-full">Change Photo</Button>
+        
+        <div className="w-full">
+          <ImageUpload
+            onImageSelect={handleImageSelect}
+            currentImage={currentImage}
+            label="Update Profile Photo"
+          />
+        </div>
       </CardContent>
       <CardContent>
         <div className="space-y-2">
