@@ -41,7 +41,7 @@ const OrderHistoryModule = () => {
   const [filteredOrders, setFilteredOrders] = useState<OrderHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState<{ [key: string]: boolean }>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
@@ -101,7 +101,7 @@ const OrderHistoryModule = () => {
 
   const handleViewInvoice = async (orderId: string) => {
     try {
-      setInvoiceLoading(true);
+      setInvoiceLoading(prev => ({ ...prev, [orderId]: true }));
       const result = await generateInvoice(orderId);
       
       if (result.success) {
@@ -113,7 +113,7 @@ const OrderHistoryModule = () => {
       console.error('Error generating invoice:', error);
       toast.error('Failed to generate invoice');
     } finally {
-      setInvoiceLoading(false);
+      setInvoiceLoading(prev => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -136,6 +136,8 @@ const OrderHistoryModule = () => {
         return '💳';
       case 'upi':
         return '📱';
+      case 'razorpay':
+        return '💳';
       case 'cod':
         return '💵';
       default:
@@ -274,10 +276,10 @@ const OrderHistoryModule = () => {
                         variant="outline" 
                         size="sm"
                         onClick={() => handleViewInvoice(order.id)}
-                        disabled={invoiceLoading}
+                        disabled={invoiceLoading[order.id]}
                       >
                         <FileText className="h-4 w-4 mr-2" />
-                        View Invoice
+                        {invoiceLoading[order.id] ? 'Loading...' : 'View Invoice'}
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">

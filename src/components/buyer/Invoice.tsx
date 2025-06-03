@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,68 +46,101 @@ const Invoice: React.FC<InvoiceProps> = ({ invoiceData }) => {
   const handleDownloadPDF = () => {
     const doc = new jsPDF();
     
-    // Set up the PDF with professional styling
+    // Set up the PDF with professional styling and Go Fresh branding
+    // Header with Go Fresh branding
+    doc.setFillColor(34, 139, 34); // Forest green color
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('🥬 GO FRESH', 20, 25);
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Connecting Farmers & Buyers', 20, 32);
+    
+    // Reset text color for rest of document
+    doc.setTextColor(0, 0, 0);
+    
+    // Invoice title and number
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
-    doc.text('FARMCONNECT INVOICE', 20, 30);
+    doc.text('INVOICE', 140, 25);
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Invoice Number: ${invoiceData.invoiceNumber}`, 20, 50);
-    doc.text(`Date: ${invoiceData.date}`, 20, 60);
+    doc.text(`Invoice #: ${invoiceData.invoiceNumber}`, 140, 32);
     
-    // Buyer Details
+    // Invoice details section
+    doc.setFontSize(12);
+    doc.text(`Date: ${invoiceData.date}`, 20, 55);
+    doc.text(`Order ID: ${invoiceData.orderId.slice(0, 8)}`, 20, 65);
+    doc.text(`Transaction ID: ${invoiceData.transactionId}`, 20, 75);
+    
+    // Buyer Details section
     doc.setFont('helvetica', 'bold');
-    doc.text('BILL TO:', 20, 80);
+    doc.text('BILL TO:', 20, 95);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${invoiceData.buyerDetails.name}`, 20, 90);
-    doc.text(`${invoiceData.deliveryAddress.addressLine1}`, 20, 100);
-    doc.text(`${invoiceData.deliveryAddress.city}, ${invoiceData.deliveryAddress.state}`, 20, 110);
-    doc.text(`${invoiceData.deliveryAddress.postalCode}`, 20, 120);
+    doc.text(`${invoiceData.buyerDetails.name}`, 20, 105);
+    doc.text(`${invoiceData.deliveryAddress.addressLine1}`, 20, 115);
+    doc.text(`${invoiceData.deliveryAddress.city}, ${invoiceData.deliveryAddress.state}`, 20, 125);
+    doc.text(`${invoiceData.deliveryAddress.postalCode}`, 20, 135);
     
-    // Invoice Details
+    // Seller Details section
     doc.setFont('helvetica', 'bold');
-    doc.text('INVOICE DETAILS:', 120, 80);
+    doc.text('SELLER DETAILS:', 120, 95);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Order ID: ${invoiceData.orderId.slice(0, 8)}`, 120, 90);
-    doc.text(`Transaction ID: ${invoiceData.transactionId}`, 120, 100);
-    doc.text(`Payment Method: ${invoiceData.paymentMethod.toUpperCase()}`, 120, 110);
-    doc.text(`Status: PAYMENT COMPLETED`, 120, 120);
+    doc.text(`Farmer: ${invoiceData.sellerDetails.name}`, 120, 105);
+    doc.text(`Direct from Farm`, 120, 115);
+    doc.text(`Fresh & Organic`, 120, 125);
     
-    // Product Details
+    // Product details table header
+    doc.setFillColor(240, 240, 240);
+    doc.rect(20, 150, 170, 10, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.text('PRODUCT DETAILS:', 20, 150);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Product: ${invoiceData.productDetails.name}`, 20, 160);
-    doc.text(`Quantity: ${invoiceData.productDetails.quantity} ${invoiceData.productDetails.unit}`, 20, 170);
-    doc.text(`Description: ${invoiceData.productDetails.description}`, 20, 180);
+    doc.text('PRODUCT DETAILS', 25, 157);
     
-    // Payment Summary
+    // Product details
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Product: ${invoiceData.productDetails.name}`, 25, 170);
+    doc.text(`Quantity: ${invoiceData.productDetails.quantity} ${invoiceData.productDetails.unit}`, 25, 180);
+    doc.text(`Description: ${invoiceData.productDetails.description}`, 25, 190);
+    
+    // Payment summary table
+    doc.setFillColor(240, 240, 240);
+    doc.rect(20, 205, 170, 10, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.text('PAYMENT SUMMARY:', 20, 200);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Subtotal: ₹${invoiceData.amount.toLocaleString()}`, 20, 210);
-    doc.text('Delivery Charges: FREE', 20, 220);
-    doc.text('Tax (GST): Inclusive', 20, 230);
+    doc.text('PAYMENT SUMMARY', 25, 212);
     
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Subtotal: ₹${invoiceData.amount.toLocaleString()}`, 25, 225);
+    doc.text('Delivery Charges: FREE', 25, 235);
+    doc.text('Tax (GST): Inclusive', 25, 245);
+    
+    // Total amount with highlight
+    doc.setFillColor(34, 139, 34);
+    doc.rect(20, 255, 170, 15, 'F');
+    doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
-    doc.text(`Total Amount: ₹${invoiceData.amount.toLocaleString()}`, 20, 250);
+    doc.text(`TOTAL AMOUNT: ₹${invoiceData.amount.toLocaleString()}`, 25, 265);
     
-    // Seller Information
+    // Payment method
+    doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
-    doc.text('SELLER INFORMATION:', 20, 270);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Farmer Name: ${invoiceData.sellerDetails.name}`, 20, 280);
+    doc.text(`Payment Method: ${invoiceData.paymentMethod.toUpperCase()}`, 25, 280);
+    doc.text(`Payment Status: COMPLETED`, 25, 290);
     
     // Footer
     doc.setFontSize(10);
-    doc.text('Thank you for choosing FarmConnect! 🌱', 20, 300);
-    doc.text('Supporting local farmers and promoting sustainable agriculture.', 20, 310);
-    doc.text('For queries: support@farmconnect.com', 20, 320);
+    doc.text('Thank you for choosing Go Fresh! 🌱', 25, 310);
+    doc.text('Supporting local farmers and promoting sustainable agriculture.', 25, 320);
+    doc.text('For queries: support@gofresh.com | www.gofresh.com', 25, 330);
     
-    // Save the PDF
-    doc.save(`FarmConnect-Invoice-${invoiceData.invoiceNumber}.pdf`);
+    // Save the PDF with unique filename
+    doc.save(`GoFresh-Invoice-${invoiceData.invoiceNumber}-${Date.now()}.pdf`);
   };
 
   const getPaymentMethodIcon = (method: string) => {
@@ -115,6 +149,8 @@ const Invoice: React.FC<InvoiceProps> = ({ invoiceData }) => {
         return <CreditCard className="h-4 w-4" />;
       case 'upi':
         return <span className="text-sm">📱</span>;
+      case 'razorpay':
+        return <CreditCard className="h-4 w-4" />;
       case 'cod':
         return <span className="text-sm">💵</span>;
       default:
@@ -136,17 +172,20 @@ const Invoice: React.FC<InvoiceProps> = ({ invoiceData }) => {
         </Button>
       </div>
 
-      {/* Invoice Header */}
+      {/* Invoice Header with Go Fresh Branding */}
       <div className="bg-gradient-to-r from-green-600 to-green-700 text-white p-8">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-4xl font-bold mb-2">INVOICE</h1>
-            <p className="text-green-100 text-lg">{invoiceData.invoiceNumber}</p>
+            <h1 className="text-4xl font-bold mb-2 flex items-center">
+              🥬 GO FRESH
+            </h1>
+            <p className="text-green-100 text-lg">Connecting Farmers & Buyers</p>
+            <p className="text-green-100">Fresh • Organic • Direct</p>
           </div>
           <div className="text-right">
-            <h2 className="text-2xl font-bold">FarmConnect</h2>
-            <p className="text-green-100">Connecting Farmers & Buyers</p>
-            <p className="text-green-100">Karnataka, India</p>
+            <h2 className="text-3xl font-bold mb-2">INVOICE</h2>
+            <p className="text-green-100 text-lg">{invoiceData.invoiceNumber}</p>
+            <p className="text-green-100">{invoiceData.date}</p>
           </div>
         </div>
       </div>
@@ -292,29 +331,36 @@ const Invoice: React.FC<InvoiceProps> = ({ invoiceData }) => {
           <CardHeader className="bg-purple-50">
             <CardTitle className="flex items-center text-purple-800">
               <User className="h-5 w-5 mr-2" />
-              SELLER INFORMATION
+              FARMER DETAILS
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-4">
-            <p><strong>Farmer Name:</strong> {invoiceData.sellerDetails.name}</p>
+            <div className="flex items-center mb-3">
+              <span className="text-2xl mr-3">👨‍🌾</span>
+              <div>
+                <p className="font-bold text-lg">{invoiceData.sellerDetails.name}</p>
+                <p className="text-sm text-gray-600">Verified Farmer</p>
+              </div>
+            </div>
             <p className="text-sm text-gray-600 mt-2">
-              This product was sourced directly from the farmer, ensuring fresh quality and fair pricing.
+              This product was sourced directly from the farmer, ensuring fresh quality and fair pricing. 
+              Your purchase supports sustainable farming practices.
             </p>
           </CardContent>
         </Card>
       </CardContent>
 
       {/* Footer */}
-      <CardFooter className="bg-gray-50 border-t p-8">
+      <CardFooter className="bg-gradient-to-r from-green-50 to-green-100 border-t p-8">
         <div className="w-full text-center">
           <p className="text-lg font-semibold text-gray-800 mb-2">
-            Thank you for choosing FarmConnect! 🌱
+            Thank you for choosing Go Fresh! 🥬
           </p>
           <p className="text-sm text-gray-600 mb-2">
             Supporting local farmers and promoting sustainable agriculture.
           </p>
           <p className="text-sm text-gray-600">
-            For any queries regarding this invoice, please contact us at support@farmconnect.com
+            For any queries regarding this invoice, please contact us at support@gofresh.com
           </p>
           <div className="mt-4 pt-4 border-t border-gray-200">
             <p className="text-xs text-gray-500">

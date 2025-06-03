@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,8 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { loadStripe } from '@stripe/stripe-js';
-import { IndianRupee, CreditCard, Check } from 'lucide-react';
+import { IndianRupee, CreditCard, Check, Smartphone } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Product, DeliveryAddress } from '@/types/marketplace';
 import { processPayment } from '@/services/paymentService';
@@ -32,7 +32,6 @@ const cardFormSchema = z.object({
   cvv: z.string().length(3, "CVV must be 3 digits").regex(/^\d+$/, "CVV must contain only digits"),
 });
 
-
 const PaymentDetails = () => {
   const { user } = useAuth();
   const location = useLocation();
@@ -42,7 +41,7 @@ const PaymentDetails = () => {
 
   const [product, setProduct] = useState<ProductWithWinningBid | null>(null);
   const [loading, setLoading] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState('card');
+  const [paymentMethod, setPaymentMethod] = useState('razorpay');
   const [processing, setProcessing] = useState(false);
   const [paymentStep, setPaymentStep] = useState<'method' | 'details' | 'processing' | 'success'>('method');
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress>({
@@ -54,7 +53,6 @@ const PaymentDetails = () => {
 
   const [farmerId, setFarmerId] = useState("");
   const [farmerName, setFarmerName] = useState('');
-  const [transactionId,setTransactionId] = useState("");
 
   // Forms for different payment methods
   const cardForm = useForm({
@@ -66,7 +64,6 @@ const PaymentDetails = () => {
       cvv: '',
     }
   });
-
 
   // Load product details
   useEffect(() => {
@@ -126,8 +123,6 @@ const PaymentDetails = () => {
     fetchProduct();
   }, [productId, user?.id, navigate]);
 
-
-
   useEffect(() => {
     const fetchFarmerName = async () => {
       console.log("Looking for farmer with ID:", farmerId);
@@ -154,9 +149,6 @@ const PaymentDetails = () => {
   if (farmerId) fetchFarmerName();
   }, [farmerId]);
 
-
-
-
   // Handle payment method selection
   const handlePaymentMethodSelect = (method: string) => {
     setPaymentMethod(method);
@@ -170,6 +162,54 @@ const PaymentDetails = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  // Process Razorpay payment
+  const handleRazorpaySubmit = async () => {
+    if (!product || !user || !deliveryAddress.addressLine1 || !deliveryAddress.city || !deliveryAddress.state || !deliveryAddress.postalCode) {
+      toast.error("Please complete all delivery address fields");
+      return;
+    }
+
+    setProcessing(true);
+    setPaymentStep('processing');
+
+    try {
+      const amount = product.winningBid;
+      if (!amount) {
+        throw new Error('Invalid bid amount');
+      }
+
+      const userDetails = {
+        name: user.user_metadata?.name || user.email || 'Unknown',
+        email: user.email || '',
+        phone: user.user_metadata?.phone || ''
+      };
+
+      // Process the payment
+      const result = await processPayment(
+        amount,
+        productId as string,
+        'razorpay',
+        deliveryAddress,
+        product.name,
+        userDetails
+      );
+
+      if (!result.success) {
+        throw new Error(result.message || 'Payment failed');
+      }
+
+      setPaymentStep('success');
+      toast.success("Payment successful!");
+
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      toast.error(error.message || "Payment failed. Please try again.");
+      setPaymentStep('details');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   // Process card payment
@@ -199,8 +239,7 @@ const PaymentDetails = () => {
         amount,
         productId as string,
         'card',
-        deliveryAddress,
-        // cardDetails:cardForm
+        deliveryAddress
       );
 
       if (!result.success) {
@@ -210,7 +249,6 @@ const PaymentDetails = () => {
       setPaymentStep('success');
       toast.success("Payment successful!");
 
-
     } catch (error: any) {
       console.error("Payment error:", error);
       toast.error(error.message || "Payment failed. Please try again.");
@@ -219,8 +257,6 @@ const PaymentDetails = () => {
       setProcessing(false);
     }
   });
-
-
 
   // Go back to payment method selection
   const handleGoBackToMethods = () => {
@@ -251,10 +287,10 @@ const PaymentDetails = () => {
     doc.text("Payment Receipt", 20, 20);
 
     doc.setFontSize(12);
-    doc.text(`Buyer Name: ${user.name}`, 20, 40);
+    doc.text(`Buyer Name: ${user?.user_metadata?.name || user?.email}`, 20, 40);
     doc.text(`Product: ${product.name}`, 20, 60);
     doc.text(`Price: ₹${product.winningBid}`, 20, 70);
-    doc.text(`Payment Method: Card`, 20, 80);
+    doc.text(`Payment Method: ${paymentMethod.toUpperCase()}`, 20, 80);
     doc.text(`Payment Status: Successful`, 20, 90);
 
     doc.save("order-receipt.pdf");
@@ -271,8 +307,11 @@ const PaymentDetails = () => {
         <p className="text-gray-600 mb-8">
           Your payment of ₹{product.winningBid} has been processed successfully.
         </p>
-        <div className="flex justify-center">
-          <Button onClick={handleDownloadPDF}>
+        <div className="flex justify-center space-x-4">
+          <Button onClick={handleDownloadPDF} variant="outline">
+            Download Receipt
+          </Button>
+          <Button onClick={() => navigate('/buyer/order-history')}>
             View Order Details
           </Button>
         </div>
@@ -297,7 +336,12 @@ const PaymentDetails = () => {
 
   return (
     <div className="container max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-8">Complete Your Purchase</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2 flex items-center">
+          🥬 Complete Your Purchase with Go Fresh
+        </h1>
+        <p className="text-gray-600">Direct from farmer to your doorstep</p>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Order summary */}
@@ -313,6 +357,9 @@ const PaymentDetails = () => {
                     <h3 className="font-semibold text-lg">{product.name}</h3>
                     <p className="text-sm text-gray-500">
                       {product.quantity} {product.unit}
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Farmer: {farmerName}
                     </p>
                   </div>
                   <div className="flex items-center">
@@ -408,6 +455,21 @@ const PaymentDetails = () => {
               <CardContent>
                 <div className="space-y-4">
                   <Button
+                    onClick={() => handlePaymentMethodSelect('razorpay')}
+                    variant="outline"
+                    className="w-full flex justify-between items-center h-auto py-3 border-green-200 hover:border-green-400"
+                  >
+                    <div className="flex items-center">
+                      <Smartphone className="h-5 w-5 mr-3 text-green-600" />
+                      <div className="text-left">
+                        <span className="font-semibold">Razorpay</span>
+                        <p className="text-xs text-gray-500">UPI, Cards, Wallets</p>
+                      </div>
+                    </div>
+                    <span className="text-green-600">→</span>
+                  </Button>
+
+                  <Button
                     onClick={() => handlePaymentMethodSelect('card')}
                     variant="outline"
                     className="w-full flex justify-between items-center h-auto py-3"
@@ -417,6 +479,36 @@ const PaymentDetails = () => {
                       <span>Credit/Debit Card</span>
                     </div>
                     <span className="text-gray-400">→</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {paymentStep === 'details' && paymentMethod === 'razorpay' && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex justify-between items-center">
+                  <span>Razorpay Payment</span>
+                  <Button variant="ghost" size="sm" onClick={handleGoBackToMethods}>
+                    Change
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <Smartphone className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                    <p className="text-sm text-gray-600">
+                      You'll be redirected to Razorpay for secure payment
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleRazorpaySubmit}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={processing}
+                  >
+                    Pay ₹{product.winningBid} with Razorpay
                   </Button>
                 </div>
               </CardContent>

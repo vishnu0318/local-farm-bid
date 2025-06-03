@@ -1,12 +1,13 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { DeliveryAddress } from "@/types/marketplace";
+import { processRazorpayPayment } from "./razorpayService";
 
 interface PaymentIntentRequest {
   amount: number;
   productId: string;
   productName?: string;
-  paymentMethod?: 'card' | 'cod' | 'upi';
+  paymentMethod?: 'card' | 'cod' | 'upi' | 'razorpay';
 }
 
 interface PaymentIntentResponse {
@@ -133,7 +134,6 @@ export const recordPayment = async (
   }
 };
 
-
 export const processCardPayment = async (
   productId: string,
   amount: number,
@@ -172,9 +172,10 @@ export const processCardPayment = async (
 export const processPayment = async (
   amount: number,
   productId: string,
-  paymentMethod: 'cod' | 'upi' | 'card',
+  paymentMethod: 'cod' | 'upi' | 'card' | 'razorpay',
   deliveryAddress: DeliveryAddress,
-  upiId?: string
+  productName?: string,
+  userDetails?: { name: string; email: string; phone?: string }
 ) => {
   try {
     let result;
@@ -182,6 +183,12 @@ export const processPayment = async (
     switch (paymentMethod) {
       case 'card':
         result = await processCardPayment(productId, amount, deliveryAddress, {});
+        break;
+      case 'razorpay':
+        if (!productName || !userDetails) {
+          return { success: false, message: 'Missing required details for Razorpay payment' };
+        }
+        result = await processRazorpayPayment(amount, productId, productName, deliveryAddress, userDetails);
         break;
       default:
         return { success: false, message: 'Invalid payment method' };
@@ -254,9 +261,6 @@ export const markProductAsPaid = async (productId: string) => {
   }
 };
 
-/**
- * Generate an invoice for a completed payment
- */
 export const generateInvoice = async (orderId: string) => {
   try {
     const { data, error } = await supabase
