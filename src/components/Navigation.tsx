@@ -1,9 +1,10 @@
+
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Menu, X, ChevronDown, LogOut, User, Bell } from 'lucide-react';
+import { Menu, X, LogOut, User } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { Notification } from '@/types/marketplace';
 import NotificationsDropdown from './NotificationsDropdown';
@@ -264,7 +264,7 @@ const Navigation = () => {
                       <Button variant="ghost" className="relative rounded-full p-1 text-gray-400 hover:text-gray-500 focus:outline-none">
                         <span className="sr-only">Open user menu</span>
                         <Avatar>
-                          <AvatarImage src={user.avatar_url || ''} />
+                          <AvatarImage src="" />
                           <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                         </Avatar>
                       </Button>
@@ -433,7 +433,7 @@ const Navigation = () => {
               <div className="flex items-center px-4">
                 <div className="flex-shrink-0">
                   <Avatar>
-                    <AvatarImage src={user.avatar_url || ''} />
+                    <AvatarImage src="" />
                     <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
                   </Avatar>
                 </div>
