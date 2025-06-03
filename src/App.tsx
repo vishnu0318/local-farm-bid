@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -26,6 +25,8 @@ import PaymentDetails from "./pages/buyer/PaymentDetails";
 import BuyerProfile from "./pages/buyer/Profile";
 import CropDetail from "./pages/CropDetail";
 import MainLayout from "./layouts/MainLayout";
+import OrderHistory from '@/pages/buyer/OrderHistory';
+import SalesHistory from '@/pages/farmer/SalesHistory';
 
 // Initialize QueryClient outside of component
 const queryClient = new QueryClient();
@@ -54,6 +55,7 @@ const App: React.FC = () => {
                     <Route path="profile" element={<FarmerProfile />} />
                     <Route path="product/:id" element={<CropDetail />} />
                     <Route path="edit-product/:id" element={<AddProduct />} />
+                    <Route path="/farmer/sales-history" element={<SalesHistory />} />
                   </Route>
 
                   {/* Buyer Routes */}
@@ -64,6 +66,7 @@ const App: React.FC = () => {
                     <Route path="payment-details" element={<PaymentDetails />} />
                     <Route path="profile" element={<BuyerProfile />} />
                     <Route path="product/:id" element={<CropDetail />} />
+                    <Route path="/buyer/order-history" element={<OrderHistory />} />
                   </Route>
 
                   {/* Redirect old marketplace route to appropriate dashboard based on role */}

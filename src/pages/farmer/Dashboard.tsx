@@ -1,9 +1,9 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/context/AuthContext';
 import MarketPriceAnalytics from '@/components/farmer/MarketPriceAnalytics';
+import RecentSales from '@/components/farmer/RecentSales';
 import { IndianRupee, TrendingUp, ShoppingBasket, Users, Bell } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
@@ -415,6 +415,11 @@ const FarmerDashboard = () => {
             )}
           </CardContent>
         </Card>
+      </div>
+      
+      {/* Recent Sales Section */}
+      <div className="mb-8">
+        <RecentSales />
       </div>
       
       {/* Market Price Analytics Section */}
