@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { DeliveryAddress } from "@/types/marketplace";
 
@@ -298,6 +297,7 @@ export const generateInvoice = async (orderId: string) => {
       }
     } catch (error) {
       console.log('Could not fetch buyer details, using default');
+      // Keep the default buyerDetails
     }
     
     // Try to get farmer details if not available in the join
