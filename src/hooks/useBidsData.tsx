@@ -7,7 +7,7 @@ import { getUserBidsWithProducts } from '@/services/bidService';
 import { supabase } from '@/integrations/supabase/client';
 
 export type BidStatus = {
-  status: 'winning' | 'outbid' | 'won' | 'lost';
+  status: 'winning' | 'outbid' | 'won' | 'lost' | 'completed';
   label: string;
 };
 
@@ -110,6 +110,29 @@ export const useBidsData = () => {
         }
       )
       .subscribe();
+
+    // Listen for order creation to detect completed payments
+    const orderChannel = supabase
+      .channel('public:orders')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'orders'
+        }, 
+        (payload: any) => {
+          const newOrder = payload.new as { buyer_id?: string; product_id?: string; payment_status?: string };
+          
+          // Check if this is an order by the current user
+          const isUserOrder = newOrder && newOrder.buyer_id === user?.id;
+          
+          // Refresh data when the user completes a purchase
+          if (isUserOrder && newOrder.payment_status === 'completed') {
+            fetchMyBids();
+          }
+        }
+      )
+      .subscribe();
     
     // Refresh bids status periodically
     const intervalId = setInterval(() => {
@@ -142,6 +165,7 @@ export const useBidsData = () => {
       clearInterval(intervalId);
       supabase.removeChannel(channel);
       supabase.removeChannel(productChannel);
+      supabase.removeChannel(orderChannel);
     };
   }, [user]);
 
@@ -154,14 +178,14 @@ export const useBidsData = () => {
     
     if (isPaid) {
       if (bid.product?.highest_bidder_id === user?.id) {
-        return { status: 'won', label: 'Purchased' };
+        return { status: 'completed', label: 'Completed' };
       } else {
-        return { status: 'lost', label: 'Sold' };
+        return { status: 'lost', label: 'Sold to Others' };
       }
     } else if (isEnded) {
       // Auction has ended
       if (bid.product?.highest_bidder_id === user?.id) {
-        return { status: 'won', label: 'Won' };
+        return { status: 'won', label: 'Won - Payment Pending' };
       } else {
         return { status: 'lost', label: 'Lost' };
       }
@@ -192,18 +216,21 @@ export const useBidsData = () => {
     const activeBids = bids.filter(bid => {
       const now = new Date();
       const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
-      return !bidEnd || now <= bidEnd;
+      const isPaid = bid.product?.paid === true;
+      return (!bidEnd || now <= bidEnd) && !isPaid;
     });
     
     const completedBids = bids.filter(bid => {
       const now = new Date();
       const bidEnd = bid.product?.bid_end ? new Date(bid.product.bid_end) : null;
-      return bidEnd && now > bidEnd;
+      const isPaid = bid.product?.paid === true;
+      return (bidEnd && now > bidEnd) || isPaid;
     });
     
-    const wonBids = completedBids.filter(bid => 
-      getBidStatus(bid).status === 'won'
-    );
+    const wonBids = completedBids.filter(bid => {
+      const status = getBidStatus(bid);
+      return status.status === 'won' || status.status === 'completed';
+    });
     
     const lostBids = completedBids.filter(bid => 
       getBidStatus(bid).status === 'lost'

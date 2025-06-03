@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { DeliveryAddress } from "@/types/marketplace";
 import { processRazorpayPayment } from "./razorpayService";
@@ -120,6 +119,23 @@ export const recordPayment = async (
       .eq('id', productId);
 
     if (updateError) throw new Error(`Error updating product status: ${updateError.message}`);
+
+    // Create notification for the farmer about payment received
+    if (productData.farmer_id) {
+      try {
+        await supabase.from('notifications').insert([{
+          type: 'payment_received',
+          message: `Payment of ₹${amount} received for ${productData.name}`,
+          product_id: productId,
+          farmer_id: productData.farmer_id,
+          read: false,
+          bidder_name: user.user_metadata?.name || user.email,
+          bid_amount: amount
+        }]);
+      } catch (notificationError) {
+        console.error("Error creating farmer notification:", notificationError);
+      }
+    }
     
     return { 
       success: true, 
@@ -194,31 +210,8 @@ export const processPayment = async (
         return { success: false, message: 'Invalid payment method' };
     }
     
-    // After successful payment, try to create notification
+    // Generate and return invoice data
     if (result.success && result.data) {
-      try {
-        // Get the farmer ID from the product
-        const farmerId = result.data.product?.farmer_id;
-        const { data: { user } } = await supabase.auth.getUser();
-        
-        if (farmerId && user) {
-          // Create notification for the farmer
-          await supabase.from('notifications').insert([{
-            type: 'payment_received',
-            message: `Payment of ₹${amount} received for ${result.data.product.name}`,
-            product_id: productId,
-            farmer_id: farmerId,
-            read: false,
-            bidder_name: user.user_metadata?.name || user.email,
-            bid_amount: amount
-          }]);
-        }
-      } catch (notificationError) {
-        console.error("Error creating notification:", notificationError);
-        // Continue even if notification fails
-      }
-
-      // Generate and return invoice data
       const invoiceData = {
         transactionId: result.data.transactionId,
         productName: result.data.product.name,

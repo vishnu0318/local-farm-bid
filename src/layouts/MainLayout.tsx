@@ -1,116 +1,177 @@
-
-import { ReactNode } from 'react';
-import { Navigate, Outlet, useLocation, Link } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarTrigger,
-  SidebarInset
-} from '@/components/ui/sidebar';
-import { Home, Package, CreditCard, Settings, LogOut, User, Plus, List } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { 
+  User, 
+  ShoppingBag, 
+  DollarSign, 
+  Package, 
+  Plus, 
+  Home, 
+  Bell,
+  History,
+  Receipt,
+  TrendingUp,
+  CreditCard,
+  LogOut
+} from 'lucide-react';
+import NotificationsDropdown from '@/components/NotificationsDropdown';
+import { toast } from 'sonner';
 
-interface MainLayoutProps {
-  userRole: 'farmer' | 'buyer';
-}
-
-const MainLayout = ({ userRole }: MainLayoutProps) => {
-  const { user, logout, isFarmer, isBuyer } = useAuth();
+const MainLayout = () => {
+  const { user, profile, logout } = useAuth();
+  const navigate = useNavigate();
   const location = useLocation();
-  
-  // Redirect if user is not authenticated or has wrong role
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
-  
-  if ((userRole === 'farmer' && !isFarmer()) || (userRole === 'buyer' && !isBuyer())) {
-    return <Navigate to="/" />;
-  }
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  const getFarmerNavItems = () => [
-    { icon: Home, title: 'Dashboard', path: '/farmer' },
-    { icon: Plus, title: 'Add Product', path: '/farmer/add-product' },
-    { icon: Package, title: 'My Products', path: '/farmer/my-products' },
-    { icon: CreditCard, title: 'Payment Info', path: '/farmer/payment-info' },
-    { icon: User, title: 'Profile', path: '/farmer/profile' },
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      if (user && profile) {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('farmer_id', profile.id)
+          .eq('read', false);
+
+        if (error) {
+          console.error('Error fetching notifications:', error);
+        } else {
+          setUnreadNotifications(data?.length || 0);
+        }
+      }
+    };
+
+    fetchNotifications();
+
+    const notificationListener = supabase
+      .channel('public:notifications')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {
+        if (payload.new.farmer_id === profile?.id) {
+          fetchNotifications();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(notificationListener);
+    };
+  }, [user, profile]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Logged out successfully');
+      navigate('/login');
+    } catch (error) {
+      toast.error('Error logging out');
+    }
+  };
+
+  const buyerNavItems = [
+    { path: '/buyer/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/buyer/browse-products', label: 'Browse Products', icon: ShoppingBag },
+    { path: '/buyer/my-bids', label: 'My Bids', icon: DollarSign },
+    { path: '/buyer/order-history', label: 'Order History', icon: History },
+    { path: '/buyer/profile', label: 'Profile', icon: User },
   ];
 
-  const getBuyerNavItems = () => [
-    { icon: Home, title: 'Dashboard', path: '/buyer' },
-    { icon: Package, title: 'Browse Products', path: '/buyer/browse-products' },
-    { icon: List, title: 'My Bids', path: '/buyer/my-bids' },
-    { icon: CreditCard, title: 'Payment Details', path: '/buyer/payment-details' },
-    { icon: User, title: 'Profile', path: '/buyer/profile' },
+  const farmerNavItems = [
+    { path: '/farmer/dashboard', label: 'Dashboard', icon: Home },
+    { path: '/farmer/my-products', label: 'My Products', icon: Package },
+    { path: '/farmer/add-product', label: 'Add Product', icon: Plus },
+    { path: '/farmer/sales-history', label: 'Sales History', icon: TrendingUp },
+    { path: '/farmer/payment-info', label: 'Payment Info', icon: CreditCard },
+    { path: '/farmer/profile', label: 'Profile', icon: User },
   ];
 
-  const navItems = userRole === 'farmer' ? getFarmerNavItems() : getBuyerNavItems();
+  const currentNavItems = profile?.role === 'farmer' ? farmerNavItems : buyerNavItems;
+
+  if (!user || !profile) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full">
-        <Sidebar>
-          <SidebarHeader className="p-4">
-            <Link to={userRole === 'farmer' ? '/farmer' : '/buyer'}>
-              <div className="flex items-center gap-2">
-                <Package className="h-6 w-6 text-green-600" />
-                <span className="text-xl font-bold">Go Fresh</span>
-              </div>
-            </Link>
-          </SidebarHeader>
-          
-          <SidebarContent>
-            <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={location.pathname === item.path}
-                  >
-                    <Link to={item.path}>
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarContent>
-          
-          <SidebarFooter>
-            <div className="p-4">
-              <Button 
-                variant="outline" 
-                className="w-full flex items-center gap-2 text-red-600 border-red-200 hover:bg-red-50"
-                onClick={logout}
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </Button>
-            </div>
-          </SidebarFooter>
-        </Sidebar>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <div className="w-64 bg-white shadow-lg">
+        <div className="p-6 border-b">
+          <h2 className="text-xl font-bold text-gray-800">
+            {profile.role === 'farmer' ? 'Farmer Portal' : 'Buyer Portal'}
+          </h2>
+          <p className="text-sm text-gray-600">{profile.name}</p>
+        </div>
         
-        <SidebarInset className="p-4">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <SidebarTrigger className="h-8 w-8 lg:hidden" />
-            </div>
-            <div className="text-sm text-gray-500">
-              Welcome, {user?.name} ({userRole})
+        <nav className="p-4">
+          <ul className="space-y-2">
+            {currentNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              
+              return (
+                <li key={item.path}>
+                  <Button
+                    variant={isActive ? "default" : "ghost"}
+                    className="w-full justify-start"
+                    onClick={() => navigate(item.path)}
+                  >
+                    <Icon className="mr-3 h-4 w-4" />
+                    {item.label}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className="absolute bottom-4 left-4 right-4">
+          <Separator className="mb-4" />
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={handleLogout}
+          >
+            <LogOut className="mr-3 h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Top Bar */}
+        <header className="bg-white shadow-sm border-b p-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-semibold text-gray-800">
+              Go Fresh Marketplace
+            </h1>
+            
+            <div className="flex items-center space-x-4">
+              <NotificationsDropdown />
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                  <User className="h-4 w-4 text-white" />
+                </div>
+                <span className="text-sm font-medium">{profile.name}</span>
+              </div>
             </div>
           </div>
-          
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 p-6 overflow-auto">
           <Outlet />
-        </SidebarInset>
+        </main>
       </div>
-    </SidebarProvider>
+    </div>
   );
 };
 

@@ -33,6 +33,26 @@ const RecentSales = () => {
   useEffect(() => {
     if (!user) return;
     fetchRecentSales();
+    
+    // Set up real-time listener for new orders
+    const channel = supabase
+      .channel('orders-updates')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'orders'
+        }, 
+        () => {
+          // Refresh sales when new order is created
+          fetchRecentSales();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const fetchRecentSales = async () => {
@@ -103,6 +123,8 @@ const RecentSales = () => {
         return '💳';
       case 'upi':
         return '📱';
+      case 'razorpay':
+        return '💳';
       case 'cod':
         return '💵';
       default:
