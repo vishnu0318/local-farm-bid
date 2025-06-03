@@ -18,6 +18,7 @@ interface Sale {
   payment_date: string;
   transaction_id: string;
   delivery_address: any;
+  created_at: string;
   product: {
     name: string;
     quantity: number;
