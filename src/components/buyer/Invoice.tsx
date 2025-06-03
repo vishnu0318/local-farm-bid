@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { IndianRupee, FileText, Calendar, CreditCard, Package, MapPin, User, download } from 'lucide-react';
+import { IndianRupee, FileText, Calendar, CreditCard, Package, MapPin, User, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 
 interface InvoiceProps {
@@ -131,7 +131,7 @@ const Invoice: React.FC<InvoiceProps> = ({ invoiceData }) => {
           Print
         </Button>
         <Button variant="default" onClick={handleDownloadPDF}>
-          <download className="h-4 w-4 mr-2" />
+          <Download className="h-4 w-4 mr-2" />
           Download PDF
         </Button>
       </div>

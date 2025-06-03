@@ -3,7 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { upload, camera, image } from 'lucide-react';
+import { Upload, Camera, Image } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ImageUploadProps {
@@ -113,7 +113,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           disabled={isUploading}
           className="flex items-center"
         >
-          <upload className="h-4 w-4 mr-2" />
+          <Upload className="h-4 w-4 mr-2" />
           {isUploading ? 'Uploading...' : 'Upload from Gallery'}
         </Button>
         
@@ -124,7 +124,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           disabled={isUploading}
           className="flex items-center"
         >
-          <camera className="h-4 w-4 mr-2" />
+          <Camera className="h-4 w-4 mr-2" />
           Capture Photo
         </Button>
       </div>
