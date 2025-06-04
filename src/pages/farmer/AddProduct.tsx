@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, isAfter, startOfToday, addHours } from 'date-fns';
-import { Calendar as CalendarIcon, Clock, IndianRupee } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, IndianRupee, Sparkles, Save, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CATEGORIES } from '@/constants/productCategories';
 import { addProduct, updateProduct } from '@/services/productService';
@@ -194,21 +194,42 @@ const AddProduct = () => {
   const today = startOfToday();
 
   return (
-    <div className="w-full px-2 sm:px-0">
-      <h1 className="text-2xl sm:text-3xl font-bold mb-4 sm:mb-6">
-        {editMode ? 'Edit Product' : 'Add New Product'}
-      </h1>
+    <div className="w-full px-2 sm:px-0 space-y-6">
+      {/* Enhanced Header */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-secondary/5 to-primary/5 p-8 border border-white/20 shadow-xl">
+        <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-white/5"></div>
+        <div className="relative">
+          <div className="flex items-center space-x-3 mb-2">
+            <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              {editMode ? 'Edit Product' : 'Add New Product'}
+            </h1>
+          </div>
+          <p className="text-gray-600 text-lg">
+            {editMode ? 'Update your product details' : 'Share your fresh produce with the marketplace'}
+          </p>
+        </div>
+      </div>
       
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>{editMode ? 'Edit Product Details' : 'Product Details'}</CardTitle>
-          <CardDescription>Enter the details of your product</CardDescription>
+      {/* Enhanced Form Card */}
+      <Card className="w-full bg-white/80 backdrop-blur-xl shadow-2xl border border-white/20 rounded-2xl overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-transparent to-white/30 pointer-events-none"></div>
+        <CardHeader className="relative bg-gradient-to-r from-primary/5 to-secondary/5 border-b border-white/20">
+          <CardTitle className="text-2xl font-bold text-gray-800">Product Details</CardTitle>
+          <CardDescription className="text-gray-600">Enter the details of your product</CardDescription>
         </CardHeader>
+        
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Product Name</Label>
+          <CardContent className="space-y-6 p-8 relative">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Product Name */}
+              <div className="space-y-3 group">
+                <Label htmlFor="name" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Product Name
+                  <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Input 
                   id="name" 
                   name="name" 
@@ -216,28 +237,39 @@ const AddProduct = () => {
                   value={formData.name} 
                   onChange={handleChange} 
                   required 
+                  className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md focus:shadow-lg"
                 />
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+              {/* Category */}
+              <div className="space-y-3 group">
+                <Label htmlFor="category" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Category
+                  <div className="w-2 h-2 bg-secondary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Select 
                   value={formData.category} 
                   onValueChange={(value) => handleSelectChange('category', value)}
                 >
-                  <SelectTrigger id="category">
+                  <SelectTrigger id="category" className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white/95 backdrop-blur-xl border-white/30 rounded-xl shadow-2xl">
                     {CATEGORIES.map(category => (
-                      <SelectItem key={category.id} value={category.id}>{category.label}</SelectItem>
+                      <SelectItem key={category.id} value={category.id} className="hover:bg-primary/10 rounded-lg transition-colors duration-200">
+                        {category.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
+              {/* Quantity */}
+              <div className="space-y-3 group">
+                <Label htmlFor="quantity" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Quantity
+                  <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Input 
                   id="quantity" 
                   name="quantity" 
@@ -246,30 +278,40 @@ const AddProduct = () => {
                   value={formData.quantity} 
                   onChange={handleChange} 
                   required 
+                  className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md focus:shadow-lg"
                 />
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="unit">Unit</Label>
+              {/* Unit */}
+              <div className="space-y-3 group">
+                <Label htmlFor="unit" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Unit
+                  <div className="w-2 h-2 bg-secondary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Select 
                   value={formData.unit} 
                   onValueChange={(value) => handleSelectChange('unit', value)}
                 >
-                  <SelectTrigger id="unit">
+                  <SelectTrigger id="unit" className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl">
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="kg">Kilogram (kg)</SelectItem>
-                    <SelectItem value="g">Gram (g)</SelectItem>
-                    <SelectItem value="l">Liter (L)</SelectItem>
-                    <SelectItem value="pcs">Pieces (pcs)</SelectItem>
-                    <SelectItem value="box">Box</SelectItem>
+                  <SelectContent className="bg-white/95 backdrop-blur-xl border-white/30 rounded-xl shadow-2xl">
+                    <SelectItem value="kg" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Kilogram (kg)</SelectItem>
+                    <SelectItem value="g" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Gram (g)</SelectItem>
+                    <SelectItem value="l" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Liter (L)</SelectItem>
+                    <SelectItem value="pcs" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Pieces (pcs)</SelectItem>
+                    <SelectItem value="box" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Box</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="price" className="flex items-center">Base Price <IndianRupee className="h-3 w-3 ml-1"/></Label>
+              {/* Price */}
+              <div className="space-y-3 group">
+                <Label htmlFor="price" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Base Price 
+                  <IndianRupee className="h-4 w-4 ml-1 text-primary"/>
+                  <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Input 
                   id="price" 
                   name="price" 
@@ -279,130 +321,160 @@ const AddProduct = () => {
                   value={formData.price} 
                   onChange={handleChange} 
                   required 
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="imageUrl">Image URL</Label>
-                <Input 
-                  id="imageUrl" 
-                  name="imageUrl" 
-                  placeholder="Enter image URL" 
-                  value={formData.imageUrl} 
-                  onChange={handleChange} 
+                  className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md focus:shadow-lg"
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bidStartDate">Bid Start Date</Label>
+              {/* Bid Start Date */}
+              <div className="space-y-3 group">
+                <Label htmlFor="bidStartDate" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Bid Start Date
+                  <div className="w-2 h-2 bg-secondary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       id="bidStartDate"
                       variant={"outline"}
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full h-12 justify-start text-left font-normal bg-white/80 backdrop-blur-sm border-white/30 hover:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md",
                         !formData.bidStartDate && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
                       {formData.bidStartDate ? format(formData.bidStartDate, "PPP") : <span>Pick a date</span>}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
+                  <PopoverContent className="w-auto p-0 bg-white/95 backdrop-blur-xl border-white/30 rounded-xl shadow-2xl">
                     <Calendar
                       mode="single"
                       selected={formData.bidStartDate || undefined}
                       onSelect={(date) => handleDateChange('bidStartDate', date)}
                       disabled={(date) => date < today}
                       initialFocus
+                      className="rounded-xl"
                     />
                   </PopoverContent>
                 </Popover>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bidStartTime">Bid Start Time</Label>
+              {/* Bid Start Time */}
+              <div className="space-y-3 group">
+                <Label htmlFor="bidStartTime" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Bid Start Time
+                  <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <div className="flex items-center">
-                  <Clock className="mr-2 h-4 w-4 text-gray-400" />
+                  <Clock className="mr-3 h-5 w-5 text-primary" />
                   <Input
                     id="bidStartTime"
                     name="bidStartTime"
                     type="time"
                     value={formData.bidStartTime}
                     onChange={handleTimeChange}
+                    className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md focus:shadow-lg"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bidEndDate">Bid End Date</Label>
+              {/* Bid End Date */}
+              <div className="space-y-3 group">
+                <Label htmlFor="bidEndDate" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Bid End Date
+                  <div className="w-2 h-2 bg-secondary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button
                       id="bidEndDate"
                       variant={"outline"}
                       className={cn(
-                        "w-full justify-start text-left font-normal",
+                        "w-full h-12 justify-start text-left font-normal bg-white/80 backdrop-blur-sm border-white/30 hover:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md",
                         !formData.bidEndDate && "text-muted-foreground"
                       )}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
                       {formData.bidEndDate ? format(formData.bidEndDate, "PPP") : <span>Pick a date</span>}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
+                  <PopoverContent className="w-auto p-0 bg-white/95 backdrop-blur-xl border-white/30 rounded-xl shadow-2xl">
                     <Calendar
                       mode="single"
                       selected={formData.bidEndDate || undefined}
                       onSelect={(date) => handleDateChange('bidEndDate', date)}
                       disabled={(date) => date < today}
                       initialFocus
+                      className="rounded-xl"
                     />
                   </PopoverContent>
                 </Popover>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bidEndTime">Bid End Time</Label>
+              {/* Bid End Time */}
+              <div className="space-y-3 group">
+                <Label htmlFor="bidEndTime" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Bid End Time
+                  <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
                 <div className="flex items-center">
-                  <Clock className="mr-2 h-4 w-4 text-gray-400" />
+                  <Clock className="mr-3 h-5 w-5 text-primary" />
                   <Input
                     id="bidEndTime"
                     name="bidEndTime"
                     type="time"
                     value={formData.bidEndTime}
                     onChange={handleTimeChange}
+                    className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md focus:shadow-lg"
                   />
                 </div>
               </div>
-
-              {/* Image Upload - Replace the imageUrl input */}
-              <div className="md:col-span-2">
-                <ImageUpload
-                  onImageSelect={handleImageSelect}
-                  currentImage={formData.imageUrl}
-                  label="Product Image"
-                />
-              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+            {/* Image Upload Section - Enhanced */}
+            <div className="space-y-4 p-6 bg-gradient-to-br from-primary/5 to-secondary/5 rounded-2xl border border-white/30">
+              <ImageUpload
+                onImageSelect={handleImageSelect}
+                currentImage={formData.imageUrl}
+                label="Product Image"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-3 group">
+              <Label htmlFor="description" className="text-sm font-semibold text-gray-700 flex items-center">
+                Description
+                <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+              </Label>
               <Textarea 
                 id="description" 
                 name="description" 
-                placeholder="Describe your product" 
+                placeholder="Describe your product in detail..." 
                 value={formData.description} 
                 onChange={handleChange} 
-                className="min-h-[100px]"
+                className="min-h-[120px] bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl transition-all duration-300 hover:shadow-md focus:shadow-lg resize-none"
               />
             </div>
           </CardContent>
-          <CardFooter>
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/farmer/my-products')}>Cancel</Button>
-              <Button type="submit" className="w-full sm:w-auto">{editMode ? 'Update Product' : 'Add Product'}</Button>
+          
+          {/* Enhanced Footer */}
+          <CardFooter className="p-8 bg-gradient-to-r from-gray-50/50 to-white/50 border-t border-white/20">
+            <div className="flex flex-col sm:flex-row gap-4 w-full">
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full sm:w-auto h-12 rounded-xl border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all duration-300 hover:shadow-md group" 
+                onClick={() => navigate('/farmer/my-products')}
+              >
+                <X className="mr-2 h-4 w-4 group-hover:rotate-90 transition-transform duration-300" />
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 group"
+              >
+                <Save className="mr-2 h-4 w-4 group-hover:scale-110 transition-transform duration-300" />
+                {editMode ? 'Update Product' : 'Add Product'}
+              </Button>
             </div>
           </CardFooter>
         </form>

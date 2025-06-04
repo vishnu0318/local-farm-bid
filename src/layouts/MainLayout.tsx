@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -114,38 +115,58 @@ const MainLayout = () => {
 
   if (!user || !profile) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent shadow-lg"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-white shadow-lg">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-bold text-gray-800">
-            {profile.role === 'farmer' ? 'Farmer Portal' : 'Buyer Portal'}
-          </h2>
-          <p className="text-sm text-gray-600">{profile.name}</p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-green-50 to-blue-50 flex">
+      {/* Static Sidebar with Glass Effect */}
+      <div className="w-72 bg-white/80 backdrop-blur-xl shadow-2xl border-r border-white/20 relative overflow-hidden">
+        {/* Animated Background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5"></div>
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-secondary to-primary animate-pulse"></div>
+        
+        {/* Header */}
+        <div className="relative p-6 border-b border-white/20 bg-gradient-to-r from-primary/10 to-secondary/10">
+          <div className="flex items-center space-x-3 mb-2">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform duration-300">
+              <Package className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                {profile.role === 'farmer' ? 'Farmer Portal' : 'Buyer Portal'}
+              </h2>
+              <p className="text-sm text-gray-600 font-medium">{profile.name}</p>
+            </div>
+          </div>
         </div>
         
-        <nav className="p-4">
+        {/* Navigation */}
+        <nav className="relative p-4 flex-1">
           <ul className="space-y-2">
-            {currentNavItems.map((item) => {
+            {currentNavItems.map((item, index) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               
               return (
-                <li key={item.path}>
+                <li key={item.path} 
+                    className="transform transition-all duration-300 hover:scale-105"
+                    style={{ animationDelay: `${index * 100}ms` }}>
                   <Button
                     variant={isActive ? "default" : "ghost"}
-                    className="w-full justify-start"
+                    className={`w-full justify-start h-12 group relative overflow-hidden ${
+                      isActive 
+                        ? "bg-gradient-to-r from-primary to-secondary text-white shadow-lg hover:shadow-xl" 
+                        : "hover:bg-white/60 hover:shadow-md"
+                    } transition-all duration-300 rounded-xl`}
                     onClick={() => navigate(item.path)}
                   >
-                    <Icon className="mr-3 h-4 w-4" />
-                    {item.label}
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+                    <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-primary'} transition-colors duration-300`} />
+                    <span className="font-medium">{item.label}</span>
                   </Button>
                 </li>
               );
@@ -153,47 +174,60 @@ const MainLayout = () => {
           </ul>
         </nav>
 
-        <div className="absolute bottom-4 left-4 right-4">
-          <Separator className="mb-4" />
+        {/* Static Logout Button at Bottom */}
+        <div className="relative p-4 border-t border-white/20 bg-gradient-to-r from-red-50/50 to-orange-50/50">
           <Button
             variant="ghost"
-            className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+            className="w-full justify-start h-12 text-red-600 hover:text-red-700 hover:bg-red-50/80 group relative overflow-hidden transition-all duration-300 rounded-xl"
             onClick={handleLogout}
           >
-            <LogOut className="mr-3 h-4 w-4" />
-            Logout
+            <div className="absolute inset-0 bg-gradient-to-r from-red-100/0 via-red-100/50 to-red-100/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+            <LogOut className="mr-3 h-5 w-5 transition-transform duration-300 group-hover:rotate-12" />
+            <span className="font-medium">Logout</span>
           </Button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="bg-white shadow-sm border-b p-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-semibold text-gray-800">
-              Go Fresh Marketplace
-            </h1>
-            
-            <div className="flex items-center space-x-4">
-              <NotificationsDropdown 
-                notifications={notifications}
-                unreadCount={unreadNotifications}
-                markAllAsRead={markAllAsRead}
-              />
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                  <User className="h-4 w-4 text-white" />
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Enhanced Top Bar */}
+        <header className="bg-white/90 backdrop-blur-xl shadow-lg border-b border-white/20 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-secondary/5"></div>
+          <div className="relative p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent animate-pulse">
+                  Go Fresh Marketplace
+                </h1>
+                <div className="hidden md:flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-gray-600 font-medium">Live</span>
                 </div>
-                <span className="text-sm font-medium">{profile.name}</span>
+              </div>
+              
+              <div className="flex items-center space-x-6">
+                <NotificationsDropdown 
+                  notifications={notifications}
+                  unreadCount={unreadNotifications}
+                  markAllAsRead={markAllAsRead}
+                />
+                <div className="flex items-center space-x-3 bg-white/60 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg hover:shadow-xl transition-all duration-300 group">
+                  <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                    <User className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-700">{profile.name}</span>
+                </div>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 p-6 overflow-auto">
-          <Outlet />
+        {/* Enhanced Page Content */}
+        <main className="flex-1 p-8 overflow-auto relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-white/20 pointer-events-none"></div>
+          <div className="relative z-10">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
