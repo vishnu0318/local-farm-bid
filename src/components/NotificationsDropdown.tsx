@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Notification } from '@/types/marketplace';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface NotificationsDropdownProps {
   notifications: Notification[];
@@ -19,6 +21,7 @@ interface NotificationsDropdownProps {
   unreadCount?: number;
   markAllAsRead?: () => void;
   isMobile?: boolean;
+  onNotificationUpdate?: () => void;
 }
 
 const NotificationsDropdown = ({ 
@@ -26,10 +29,48 @@ const NotificationsDropdown = ({
   userRole,
   unreadCount = 0, 
   markAllAsRead = () => {}, 
-  isMobile = false 
+  isMobile = false,
+  onNotificationUpdate = () => {}
 }: NotificationsDropdownProps) => {
   const actualUnreadCount = notifications.filter(n => !n.read).length;
   const displayUnreadCount = unreadCount || actualUnreadCount;
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const unreadNotifications = notifications.filter(n => !n.read);
+      if (unreadNotifications.length === 0) return;
+
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .in('id', unreadNotifications.map(n => n.id));
+
+      if (error) throw error;
+
+      toast.success('All notifications marked as read');
+      markAllAsRead();
+      onNotificationUpdate();
+    } catch (error) {
+      console.error('Error marking notifications as read:', error);
+      toast.error('Failed to mark notifications as read');
+    }
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.read) {
+      try {
+        const { error } = await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('id', notification.id);
+
+        if (error) throw error;
+        onNotificationUpdate();
+      } catch (error) {
+        console.error('Error marking notification as read:', error);
+      }
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -51,7 +92,7 @@ const NotificationsDropdown = ({
         <DropdownMenuLabel className="flex justify-between items-center">
           <span>Notifications</span>
           {displayUnreadCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={markAllAsRead}>
+            <Button variant="ghost" size="sm" onClick={handleMarkAllAsRead}>
               Mark all as read
             </Button>
           )}
@@ -65,7 +106,11 @@ const NotificationsDropdown = ({
           </DropdownMenuItem>
         ) : (
           notifications.map((notification) => (
-            <DropdownMenuItem key={notification.id} className="flex flex-col items-start p-3 cursor-default">
+            <DropdownMenuItem 
+              key={notification.id} 
+              className="flex flex-col items-start p-3 cursor-pointer hover:bg-gray-50"
+              onClick={() => handleNotificationClick(notification)}
+            >
               <div className="flex justify-between items-start w-full">
                 <div className="flex-1">
                   <p className={`text-sm ${!notification.read ? 'font-semibold' : 'font-normal'}`}>

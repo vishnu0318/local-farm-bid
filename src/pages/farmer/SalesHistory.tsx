@@ -5,10 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { IndianRupee, Package, User, Calendar, Search, Filter } from 'lucide-react';
+import { IndianRupee, Package, User, Calendar, Search, Filter, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import FarmerInvoice from '@/components/farmer/FarmerInvoice';
+import { generateInvoice } from '@/services/paymentService';
 
 interface Sale {
   id: string;
@@ -39,19 +42,13 @@ const SalesHistory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
-
-  useEffect(() => {
-    if (!user) return;
-    fetchSalesHistory();
-  }, [user]);
-
-  useEffect(() => {
-    filterSales();
-  }, [sales, searchTerm, statusFilter, paymentMethodFilter]);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState<string | null>(null);
 
   const fetchSalesHistory = async () => {
     try {
       setLoading(true);
+      console.log('Fetching sales history for farmer:', user?.id);
       
       // Get farmer's products
       const { data: products, error: productsError } = await supabase
@@ -62,11 +59,14 @@ const SalesHistory = () => {
       if (productsError) throw productsError;
 
       if (!products || products.length === 0) {
+        console.log('No products found for farmer');
         setSales([]);
+        setFilteredSales([]);
         return;
       }
 
       const productIds = products.map(p => p.id);
+      console.log('Found product IDs:', productIds);
 
       // Get all orders for farmer's products
       const { data: orders, error: ordersError } = await supabase
@@ -85,6 +85,8 @@ const SalesHistory = () => {
 
       if (ordersError) throw ordersError;
 
+      console.log('Found orders:', orders);
+
       // Get buyer details for each order
       const salesWithBuyers = await Promise.all(
         (orders || []).map(async (order) => {
@@ -101,6 +103,7 @@ const SalesHistory = () => {
         })
       );
 
+      console.log('Sales with buyers:', salesWithBuyers);
       setSales(salesWithBuyers);
     } catch (error) {
       console.error('Error fetching sales history:', error);
@@ -110,6 +113,36 @@ const SalesHistory = () => {
     }
   };
 
+  useEffect(() => {
+    if (!user) return;
+    fetchSalesHistory();
+
+    // Set up real-time listener for orders
+    const channel = supabase
+      .channel('sales-history-updates')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'orders'
+        }, 
+        async (payload) => {
+          console.log('Order change detected in SalesHistory:', payload);
+          // Refresh sales history when any order changes
+          await fetchSalesHistory();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  useEffect(() => {
+    filterSales();
+  }, [sales, searchTerm, statusFilter, paymentMethodFilter]);
+
   const filterSales = () => {
     let filtered = [...sales];
 
@@ -118,7 +151,7 @@ const SalesHistory = () => {
       filtered = filtered.filter(sale =>
         sale.product?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         sale.buyer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sale.transaction_id.toLowerCase().includes(searchTerm.toLowerCase())
+        sale.transaction_id?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -133,6 +166,24 @@ const SalesHistory = () => {
     }
 
     setFilteredSales(filtered);
+  };
+
+  const handleViewInvoice = async (orderId: string) => {
+    try {
+      setInvoiceLoading(orderId);
+      const { success, data, error } = await generateInvoice(orderId);
+      
+      if (success && data) {
+        setSelectedInvoice(data);
+      } else {
+        toast.error(error || "Failed to generate invoice");
+      }
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      toast.error("Failed to generate invoice");
+    } finally {
+      setInvoiceLoading(null);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -154,6 +205,8 @@ const SalesHistory = () => {
         return '💳';
       case 'upi':
         return '📱';
+      case 'razorpay':
+        return '💳';
       case 'cod':
         return '💵';
       default:
@@ -221,6 +274,7 @@ const SalesHistory = () => {
                 <SelectItem value="all">All Methods</SelectItem>
                 <SelectItem value="card">Card</SelectItem>
                 <SelectItem value="upi">UPI</SelectItem>
+                <SelectItem value="razorpay">Razorpay</SelectItem>
                 <SelectItem value="cod">Cash on Delivery</SelectItem>
               </SelectContent>
             </Select>
@@ -298,8 +352,38 @@ const SalesHistory = () => {
                   </div>
                 )}
 
-                <div className="text-sm text-gray-600">
-                  <p><strong>Buyer Email:</strong> {sale.buyer?.email}</p>
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-600">
+                    <p><strong>Buyer Email:</strong> {sale.buyer?.email}</p>
+                  </div>
+                  
+                  {sale.payment_status === 'completed' && (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleViewInvoice(sale.id)}
+                          disabled={invoiceLoading === sale.id}
+                        >
+                          {invoiceLoading === sale.id ? (
+                            <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
+                          View Receipt
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Payment Receipt</DialogTitle>
+                        </DialogHeader>
+                        {selectedInvoice && (
+                          <FarmerInvoice invoice={selectedInvoice} />
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </CardContent>
             </Card>

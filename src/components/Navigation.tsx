@@ -18,27 +18,53 @@ const Navigation = () => {
   // Get user role from user metadata
   const userRole = user?.user_metadata?.role;
 
-  useEffect(() => {
-    const fetchNotifications = async () => {
-      if (!user || !userRole) return;
+  const fetchNotifications = async () => {
+    if (!user || !userRole) return;
+    
+    try {
+      let query = supabase.from('notifications').select('*');
       
-      try {
-        let query = supabase.from('notifications').select('*');
-        
-        if (userRole === 'farmer') {
-          query = query.eq('farmer_id', user.id);
-        } else if (userRole === 'buyer') {
-          query = query.eq('bidder_id', user.id);
-        }
-        
-        const { data } = await query.order('created_at', { ascending: false }).limit(10);
-        setNotifications(data || []);
-      } catch (error) {
-        console.error('Error fetching notifications:', error);
+      if (userRole === 'farmer') {
+        query = query.eq('farmer_id', user.id);
+      } else if (userRole === 'buyer') {
+        query = query.eq('bidder_id', user.id);
       }
-    };
+      
+      const { data } = await query.order('created_at', { ascending: false }).limit(10);
+      setNotifications(data || []);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
 
+  useEffect(() => {
     fetchNotifications();
+
+    // Set up real-time listener for notifications
+    const channel = supabase
+      .channel('notifications-updates')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'notifications'
+        }, 
+        async (payload) => {
+          console.log('Notification change detected:', payload);
+          const notificationData = payload.new as any;
+          
+          if (notificationData && 
+              ((userRole === 'farmer' && notificationData.farmer_id === user?.id) ||
+               (userRole === 'buyer' && notificationData.bidder_id === user?.id))) {
+            await fetchNotifications();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, userRole]);
 
   const handleLogout = async () => {
@@ -54,6 +80,7 @@ const Navigation = () => {
         { label: 'Dashboard', path: '/farmer/dashboard', icon: Home },
         { label: 'My Products', path: '/farmer/my-products', icon: Package },
         { label: 'Add Product', path: '/farmer/add-product', icon: Plus },
+        { label: 'Sales History', path: '/farmer/sales-history', icon: History },
         { label: 'Payment Info', path: '/farmer/payment-info', icon: CreditCard },
         { label: 'Profile', path: '/farmer/profile', icon: User },
       ];
@@ -123,6 +150,7 @@ const Navigation = () => {
                   <NotificationsDropdown 
                     notifications={notifications}
                     userRole={userRole}
+                    onNotificationUpdate={fetchNotifications}
                   />
                   
                   <div className="flex items-center space-x-2">
@@ -150,6 +178,7 @@ const Navigation = () => {
                 <NotificationsDropdown 
                   notifications={notifications}
                   userRole={userRole}
+                  onNotificationUpdate={fetchNotifications}
                 />
                 
                 <Sheet open={isOpen} onOpenChange={setIsOpen}>
