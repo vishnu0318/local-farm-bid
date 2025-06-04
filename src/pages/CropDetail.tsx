@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Clock, MapPin, ArrowLeft, User } from 'lucide-react';
@@ -36,6 +37,10 @@ const CropDetail = () => {
   const [cropBids, setCropBids] = useState<DataBid[]>([]);
   const crop = crops.find(c => c.id === id);
   
+  // Check user role
+  const userRole = user?.user_metadata?.role;
+  const isFarmer = userRole === 'farmer';
+  const isBuyer = userRole === 'buyer';
 
   const calculateTimeRemaining = (endTime: Date | null) => {
     if (!endTime) return { hours: 0, minutes: 0, seconds: 0, isEnded: true };
@@ -76,7 +81,12 @@ const CropDetail = () => {
             description: "The product you're looking for doesn't exist or has been removed.",
             variant: "destructive"
           });
-          navigate('/farmer/my-products');
+          // Navigate based on user role
+          if (isFarmer) {
+            navigate('/farmer/my-products');
+          } else {
+            navigate('/buyer/browse-products');
+          }
         }
       } catch (error) {
         console.error("Error fetching product:", error);
@@ -101,7 +111,7 @@ const CropDetail = () => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [id, toast, navigate, crop, bids, product?.bid_end]);
+  }, [id, toast, navigate, crop, bids, product?.bid_end, isFarmer]);
   
 
   if (loading) {
@@ -123,8 +133,8 @@ const CropDetail = () => {
           <div className="text-center">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Not Found</h2>
             <p className="text-gray-600 mb-4">The product you're looking for doesn't exist or has been removed.</p>
-            <Link to="/farmer/my-products">
-              <Button>Back to My Products</Button>
+            <Link to={isFarmer ? "/farmer/my-products" : "/buyer/browse-products"}>
+              <Button>Back to Products</Button>
             </Link>
           </div>
         </main>
@@ -167,6 +177,23 @@ const CropDetail = () => {
   const auctionStatus = getAuctionStatus();
   const isOwner = user?.id === (product?.farmer_id || crop?.farmerId);
 
+  // Get the correct back navigation path based on user role and ownership
+  const getBackPath = () => {
+    if (isFarmer) {
+      return isOwner ? '/farmer/my-products' : '/farmer/dashboard';
+    } else {
+      return '/buyer/browse-products';
+    }
+  };
+
+  const getBackLabel = () => {
+    if (isFarmer) {
+      return isOwner ? 'Back to My Products' : 'Back to Dashboard';
+    } else {
+      return 'Back to Browse Products';
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navigation />
@@ -174,9 +201,9 @@ const CropDetail = () => {
       <main className="flex-1 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mb-6">
-            <Link to="/farmer/my-products" className="flex items-center text-farmgreen-600 hover:text-farmgreen-700">
+            <Link to={getBackPath()} className="flex items-center text-farmgreen-600 hover:text-farmgreen-700">
               <ArrowLeft size={16} className="mr-1" />
-              Back to My Products
+              {getBackLabel()}
             </Link>
           </div>
 
@@ -215,7 +242,7 @@ const CropDetail = () => {
                     </div>
                   </div>
 
-                  <p className="text-sm text-gray-500 mb-4">by {profile?.name || 'You'}</p>
+                  <p className="text-sm text-gray-500 mb-4">by {isOwner ? 'You' : (profile?.name || 'Farmer')}</p>
 
                   <div className="flex flex-wrap gap-4 mb-4">
                     {distance && (
@@ -245,14 +272,41 @@ const CropDetail = () => {
               </div>
             </div>
 
-            {/* Bidding Section */}
+            {/* Bidding Section - Only show for buyers */}
             <div>
-              {!isOwner && !timeRemaining.isEnded && product && (
-                <Card className="p-4 mb-6">
-                  <h3 className="text-lg font-semibold mb-2">Place Your Bid</h3>
-                  <BidForm crop= {product}  
-                  // refreshBids={() => getProductBids(id!).then(setProductBids)}
-                  />
+              {isBuyer && !isOwner && !timeRemaining.isEnded && product && (
+                <div className="mb-6">
+                  <BidForm crop={product} />
+                </div>
+              )}
+
+              {/* Show message for farmers */}
+              {isFarmer && !isOwner && (
+                <Card className="p-4 mb-6 text-center">
+                  <h3 className="font-semibold text-lg mb-2">Farmer Account</h3>
+                  <p className="text-gray-600 mb-4">
+                    As a farmer, you can view products but cannot place bids. You can only bid on products as a buyer.
+                  </p>
+                  <Link to="/farmer/add-product">
+                    <Button variant="outline" className="w-full">
+                      List Your Products
+                    </Button>
+                  </Link>
+                </Card>
+              )}
+
+              {/* Show owner message */}
+              {isOwner && (
+                <Card className="p-4 mb-6 text-center">
+                  <h3 className="font-semibold text-lg mb-2">Your Product</h3>
+                  <p className="text-gray-600 mb-4">
+                    This is your listing. You can view bids and manage your product from your dashboard.
+                  </p>
+                  <Link to="/farmer/my-products">
+                    <Button variant="outline" className="w-full">
+                      Manage Products
+                    </Button>
+                  </Link>
                 </Card>
               )}
 

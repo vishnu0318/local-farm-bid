@@ -30,50 +30,32 @@ const RecentSales = () => {
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) return;
-    fetchRecentSales();
-    
-    // Set up real-time listener for new orders with better channel name to avoid conflicts
-    const channel = supabase
-      .channel('recent-sales-updates')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'orders'
-        }, 
-        async (payload) => {
-          console.log('Recent sales received order update:', payload);
-          // Refresh sales when new order is created or updated
-          await fetchRecentSales();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user]);
-
   const fetchRecentSales = async () => {
+    if (!user?.id) return;
+    
     try {
       setLoading(true);
+      console.log('Fetching recent sales for farmer:', user.id);
       
-      // First get farmer's products
+      // Get farmer's products
       const { data: products, error: productsError } = await supabase
         .from('products')
         .select('id')
-        .eq('farmer_id', user?.id);
+        .eq('farmer_id', user.id);
 
-      if (productsError) throw productsError;
+      if (productsError) {
+        console.error('Error fetching products:', productsError);
+        return;
+      }
 
       if (!products || products.length === 0) {
+        console.log('No products found for farmer');
         setRecentSales([]);
         return;
       }
 
       const productIds = products.map(p => p.id);
+      console.log('Found product IDs:', productIds);
 
       // Get orders for farmer's products
       const { data: orders, error: ordersError } = await supabase
@@ -91,7 +73,12 @@ const RecentSales = () => {
         .order('payment_date', { ascending: false })
         .limit(5);
 
-      if (ordersError) throw ordersError;
+      if (ordersError) {
+        console.error('Error fetching orders:', ordersError);
+        return;
+      }
+
+      console.log('Found orders:', orders);
 
       // Get buyer details for each order
       const salesWithBuyers = await Promise.all(
@@ -109,6 +96,7 @@ const RecentSales = () => {
         })
       );
 
+      console.log('Sales with buyers:', salesWithBuyers);
       setRecentSales(salesWithBuyers);
     } catch (error) {
       console.error('Error fetching recent sales:', error);
@@ -117,6 +105,63 @@ const RecentSales = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchRecentSales();
+    
+    // Set up real-time listener for new orders
+    let channel: any = null;
+    
+    const setupRealtimeListener = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const { data: products } = await supabase
+          .from('products')
+          .select('id')
+          .eq('farmer_id', user.id);
+          
+        if (!products || products.length === 0) return;
+        
+        const productIds = products.map(p => p.id);
+        
+        channel = supabase
+          .channel('recent-sales-realtime')
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'orders'
+            }, 
+            async (payload) => {
+              console.log('Order change detected in RecentSales:', payload);
+              const orderData = payload.new as any;
+              
+              if (orderData && 
+                  productIds.includes(orderData.product_id) && 
+                  orderData.payment_status === 'completed') {
+                console.log('Refreshing recent sales due to new payment');
+                await fetchRecentSales();
+              }
+            }
+          )
+          .subscribe((status) => {
+            console.log('RecentSales real-time subscription status:', status);
+          });
+      } catch (error) {
+        console.error('Error setting up real-time listener for recent sales:', error);
+      }
+    };
+    
+    setupRealtimeListener();
+
+    return () => {
+      if (channel) {
+        console.log('Cleaning up RecentSales real-time channel');
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [user?.id]);
 
   const getPaymentMethodIcon = (method: string) => {
     switch (method) {
@@ -157,11 +202,7 @@ const RecentSales = () => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
-          </div>
-        ) : recentSales.length === 0 ? (
+        {recentSales.length === 0 ? (
           <div className="text-center py-8">
             <Package className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <p className="text-gray-600">No recent sales</p>

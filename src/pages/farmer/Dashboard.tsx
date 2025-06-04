@@ -49,24 +49,22 @@ const FarmerDashboard = () => {
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Enhanced fetch function with improved real-time payment tracking
   const fetchDashboardData = async () => {
+    if (!user?.id) return;
+    
     try {
       setLoading(true);
+      console.log('Fetching dashboard data for farmer:', user.id);
       
-      // 1. Fetch active listings count
-      const { count: activeListingsCount, error: activeListingsError } = await supabase
+      // Fetch active listings count
+      const { count: activeListingsCount } = await supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
         .eq('farmer_id', user.id)
         .eq('available', true);
         
-      if (activeListingsError) {
-        console.error('Error fetching active listings:', activeListingsError);
-      }
-      
-      // 2. Fetch pending bids count (products with active bids)
-      const { data: productsWithBids, error: bidsError } = await supabase
+      // Fetch products with bids count
+      const { data: productsWithBids } = await supabase
         .from('products')
         .select(`
           id,
@@ -76,13 +74,9 @@ const FarmerDashboard = () => {
         .eq('farmer_id', user.id)
         .eq('available', true);
         
-      if (bidsError) {
-        console.error('Error fetching products with bids:', bidsError);
-      }
-      
       const pendingBidsCount = productsWithBids?.filter(p => p.bids && p.bids.length > 0).length || 0;
       
-      // 3. Fetch completed sales count from orders table
+      // Get farmer's products for order calculations
       const { data: farmerProducts } = await supabase
         .from('products')
         .select('id')
@@ -91,33 +85,28 @@ const FarmerDashboard = () => {
       const productIds = farmerProducts?.map(p => p.id) || [];
       
       let completedSalesCount = 0;
-      let totalEarnings = 0;
       let weeklyEarnings = 0;
       let monthlyEarnings = 0;
       let yearlyEarnings = 0;
       
       if (productIds.length > 0) {
-        // Get completed orders (payments received)
-        const { data: completedOrders, error: ordersError } = await supabase
+        // Get completed orders
+        const { data: completedOrders } = await supabase
           .from('orders')
           .select('*')
           .in('product_id', productIds)
           .eq('payment_status', 'completed');
           
-        if (ordersError) {
-          console.error('Error fetching completed orders:', ordersError);
-        } else {
-          completedSalesCount = completedOrders?.length || 0;
+        if (completedOrders) {
+          completedSalesCount = completedOrders.length;
           
-          // Calculate earnings properly
           const now = new Date();
           const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
           
-          completedOrders?.forEach(order => {
+          completedOrders.forEach(order => {
             const orderDate = new Date(order.payment_date || order.created_at);
-            totalEarnings += order.amount;
             
             if (orderDate >= oneWeekAgo) {
               weeklyEarnings += order.amount;
@@ -132,10 +121,11 @@ const FarmerDashboard = () => {
         }
       }
       
-      // 4. Recent activities from orders with improved data
-      const fetchRecentActivities = async () => {
-        if (productIds.length === 0) return [];
-        
+      // Fetch recent activities
+      const activities: RecentActivity[] = [];
+      
+      if (productIds.length > 0) {
+        // Recent payments
         const { data: recentOrders } = await supabase
           .from('orders')
           .select(`
@@ -147,16 +137,20 @@ const FarmerDashboard = () => {
           .order('payment_date', { ascending: false })
           .limit(3);
           
-        const orderActivities: RecentActivity[] = (recentOrders || []).map(order => ({
-          id: `payment-${order.id}`,
-          type: 'payment_received',
-          title: 'Payment received',
-          description: `${order.product?.name || 'Product'} - ₹${order.amount}`,
-          time: order.payment_date || order.created_at,
-          timeAgo: formatDistanceToNow(new Date(order.payment_date || order.created_at), { addSuffix: true })
-        }));
+        if (recentOrders) {
+          recentOrders.forEach(order => {
+            activities.push({
+              id: `payment-${order.id}`,
+              type: 'payment_received',
+              title: 'Payment received',
+              description: `${order.product?.name || 'Product'} - ₹${order.amount}`,
+              time: order.payment_date || order.created_at,
+              timeAgo: formatDistanceToNow(new Date(order.payment_date || order.created_at), { addSuffix: true })
+            });
+          });
+        }
         
-        // Also get recent bids
+        // Recent bids
         const { data: recentBids } = await supabase
           .from('bids')
           .select(`
@@ -167,27 +161,27 @@ const FarmerDashboard = () => {
           .order('created_at', { ascending: false })
           .limit(2);
           
-        const bidActivities: RecentActivity[] = (recentBids || []).map(bid => ({
-          id: `bid-${bid.id}`,
-          type: 'new_bid',
-          title: 'New bid received',
-          description: `${bid.product?.name || 'Product'} - ₹${bid.amount} by ${bid.bidder_name}`,
-          time: bid.created_at,
-          timeAgo: formatDistanceToNow(new Date(bid.created_at), { addSuffix: true })
-        }));
-        
-        return [...orderActivities, ...bidActivities]
-          .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-          .slice(0, 5);
-      };
+        if (recentBids) {
+          recentBids.forEach(bid => {
+            activities.push({
+              id: `bid-${bid.id}`,
+              type: 'new_bid',
+              title: 'New bid received',
+              description: `${bid.product?.name || 'Product'} - ₹${bid.amount} by ${bid.bidder_name}`,
+              time: bid.created_at,
+              timeAgo: formatDistanceToNow(new Date(bid.created_at), { addSuffix: true })
+            });
+          });
+        }
+      }
       
-      const activities = await fetchRecentActivities();
+      // Sort activities by time
+      activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
       
-      // Update the dashboard data state with proper monthly earnings
       setDashboardStats({
         totalEarnings: {
           week: weeklyEarnings,
-          month: monthlyEarnings, // Use calculated monthly earnings instead of total
+          month: monthlyEarnings,
           year: yearlyEarnings
         },
         activeListings: activeListingsCount || 0,
@@ -195,114 +189,106 @@ const FarmerDashboard = () => {
         completedSales: completedSalesCount
       });
       
-      setRecentActivities(activities);
-      setLoading(false);
+      setRecentActivities(activities.slice(0, 5));
+      console.log('Dashboard data updated:', {
+        activeListingsCount,
+        pendingBidsCount,
+        completedSalesCount,
+        monthlyEarnings
+      });
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
       setLoading(false);
     }
   };
 
-  // Fetch real-time dashboard data with improved subscription handling
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
     
     fetchDashboardData();
     
-    // Set up real-time listeners for both bids and orders with improved filtering
-    const setupRealtimeUpdates = async () => {
-      const { data: products } = await supabase
-        .from('products')
-        .select('id')
-        .eq('farmer_id', user.id);
-        
-      if (!products) return null;
-      
-      const productIds = products.map(p => p.id);
-      
-      if (productIds.length === 0) return null;
-      
-      // Subscribe to both bid and order changes with better event handling
-      return supabase
-        .channel('farmer-dashboard-updates')
-        .on('postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'bids',
-            filter: `product_id=in.(${productIds.join(',')})` 
-          }, 
-          async (payload) => {
-            console.log('New bid received:', payload);
-            toast.success(`New bid received!`);
-            setHasNewNotifications(true);
-            // Refresh dashboard data immediately
-            await fetchDashboardData();
-          }
-        )
-        .on('postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'orders',
-            filter: `product_id=in.(${productIds.join(',')})`
-          },
-          async (payload) => {
-            console.log('New order received:', payload);
-            const newOrder = payload.new as any;
-            if (newOrder.payment_status === 'completed') {
-              toast.success(`Payment of ₹${newOrder.amount} received!`);
-              setHasNewNotifications(true);
-              // Refresh dashboard data immediately
-              await fetchDashboardData();
-            }
-          }
-        )
-        .on('postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'orders',
-            filter: `product_id=in.(${productIds.join(',')})`
-          },
-          async (payload) => {
-            console.log('Order updated:', payload);
-            const updatedOrder = payload.new as any;
-            if (updatedOrder.payment_status === 'completed') {
-              toast.success(`Payment of ₹${updatedOrder.amount} confirmed!`);
-              setHasNewNotifications(true);
-              // Refresh dashboard data immediately
-              await fetchDashboardData();
-            }
-          }
-        )
-        .subscribe();
-    };
-    
+    // Set up real-time listeners with better error handling
     let channel: any = null;
     
-    setupRealtimeUpdates().then(result => {
-      channel = result;
-    });
+    const setupRealtimeUpdates = async () => {
+      try {
+        const { data: products } = await supabase
+          .from('products')
+          .select('id')
+          .eq('farmer_id', user.id);
+          
+        if (!products || products.length === 0) return;
+        
+        const productIds = products.map(p => p.id);
+        console.log('Setting up real-time for products:', productIds);
+        
+        channel = supabase
+          .channel('farmer-dashboard-realtime')
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'bids'
+            }, 
+            async (payload) => {
+              console.log('Bid change detected:', payload);
+              const bidData = payload.new as any;
+              if (bidData && productIds.includes(bidData.product_id)) {
+                toast.success('New bid received!');
+                setHasNewNotifications(true);
+                await fetchDashboardData();
+              }
+            }
+          )
+          .on('postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'orders'
+            },
+            async (payload) => {
+              console.log('Order change detected:', payload);
+              const orderData = payload.new as any;
+              if (orderData && productIds.includes(orderData.product_id)) {
+                if (orderData.payment_status === 'completed') {
+                  toast.success(`Payment of ₹${orderData.amount} received!`);
+                  setHasNewNotifications(true);
+                  await fetchDashboardData();
+                }
+              }
+            }
+          )
+          .subscribe((status) => {
+            console.log('Real-time subscription status:', status);
+          });
+          
+      } catch (error) {
+        console.error('Error setting up real-time updates:', error);
+      }
+    };
+    
+    setupRealtimeUpdates();
     
     // Cleanup
     return () => {
       if (channel) {
+        console.log('Cleaning up real-time channel');
         supabase.removeChannel(channel);
       }
     };
     
-  }, [user]);
+  }, [user?.id]);
 
-  // Get earnings based on selected period
   const earnings = dashboardStats.totalEarnings[selectedPeriod as keyof typeof dashboardStats.totalEarnings];
   
   return (
     <div>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Welcome back, {user?.name}</h1>
+          <h1 className="text-3xl font-bold">Welcome back, {user?.user_metadata?.name || 'Farmer'}</h1>
           <p className="text-gray-600">Here's what's happening with your farm today</p>
         </div>
         <div className="relative mt-4 md:mt-0">
@@ -431,12 +417,10 @@ const FarmerDashboard = () => {
         </Card>
       </div>
       
-      {/* Recent Sales Section */}
       <div className="mb-8">
         <RecentSales />
       </div>
       
-      {/* Market Price Analytics Section */}
       <MarketPriceAnalytics className="mb-8" />
     </div>
   );
