@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -10,7 +9,7 @@ import BidForm from '@/components/buyer/BidForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import { Loader2, MapPin, IndianRupee, Timer } from 'lucide-react';
+import { Loader2, MapPin, IndianRupee, Timer, CheckCircle } from 'lucide-react';
 import { formatDistance, format, isAfter, isBefore } from 'date-fns';
 import { Product, FarmerProfile, Bid } from '@/types/marketplace';
 import { getProductBids, subscribeToBidChanges } from '@/services/bidService';
@@ -28,6 +27,29 @@ const ProductDetail = () => {
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [auctionEnded, setAuctionEnded] = useState(false);
   const [productPaid, setProductPaid] = useState(false);
+  const [userHasPaid, setUserHasPaid] = useState(false);
+
+  // Check if user has paid for this product
+  const checkUserPaymentStatus = async () => {
+    if (!id || !user?.id) return;
+    
+    try {
+      const { data: userOrder, error } = await supabase
+        .from('orders')
+        .select('payment_status, amount')
+        .eq('product_id', id)
+        .eq('buyer_id', user.id)
+        .eq('payment_status', 'completed')
+        .single();
+        
+      if (!error && userOrder) {
+        setUserHasPaid(true);
+        console.log('User has already paid for this product');
+      }
+    } catch (error) {
+      console.log('User has not paid for this product yet');
+    }
+  };
 
   // Fetch product details and bids
   useEffect(() => {
@@ -85,6 +107,9 @@ const ProductDetail = () => {
         } else {
           setHighestBid(productData?.price || 0);
         }
+        
+        // Check user payment status
+        await checkUserPaymentStatus();
       } catch (error) {
         console.error('Error fetching product details:', error);
         toast.error('Failed to load product details');
@@ -109,7 +134,7 @@ const ProductDetail = () => {
       }
     }, 1000);
     
-    // Set up real-time subscription to bids
+    // Set up real-time subscription to bids and payments
     let channel: any;
     if (id) {
       channel = subscribeToBidChanges(id, async () => {
@@ -129,6 +154,34 @@ const ProductDetail = () => {
           }
         }
       });
+
+      // Also listen to order updates to refresh payment status
+      const orderChannel = supabase
+        .channel('product-orders')
+        .on('postgres_changes', 
+          { 
+            event: '*', 
+            schema: 'public', 
+            table: 'orders',
+            filter: `product_id=eq.${id}`
+          }, 
+          async (payload) => {
+            console.log('Order update received:', payload);
+            await checkUserPaymentStatus();
+            
+            // Also refresh product data to check if it's been marked as paid
+            const { data: updatedProduct } = await supabase
+              .from('products')
+              .select('paid')
+              .eq('id', id)
+              .single();
+              
+            if (updatedProduct) {
+              setProductPaid(updatedProduct.paid || false);
+            }
+          }
+        )
+        .subscribe();
     }
     
     return () => {
@@ -374,8 +427,39 @@ const ProductDetail = () => {
         
         {/* Bidding section */}
         <div>
-          {/* If user won the auction and product is not paid yet, show payment button */}
-          {auctionEnded && isUserHighestBidder && !productPaid && (
+          {/* If user won the auction and has already paid, show purchase completed */}
+          {auctionEnded && isUserHighestBidder && userHasPaid && (
+            <Card className="p-6 border-2 border-green-500 mb-6">
+              <CardContent className="p-0 space-y-4">
+                <div className="text-center">
+                  <CheckCircle className="h-16 w-16 mx-auto text-green-600 mb-4" />
+                  <h3 className="text-xl font-semibold text-green-600">Purchase Completed!</h3>
+                  <p className="text-gray-600">You have successfully purchased this product.</p>
+                  <Badge className="mt-2 bg-green-600">Payment Completed</Badge>
+                </div>
+                
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Amount Paid</p>
+                    <p className="text-xl font-bold flex items-center text-green-600">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {highestBid}
+                    </p>
+                  </div>
+                </div>
+                
+                <Button 
+                  className="w-full" 
+                  onClick={() => window.location.href = '/buyer/order-history'}
+                >
+                  View Order Details
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+          
+          {/* If user won the auction but hasn't paid yet, show payment button */}
+          {auctionEnded && isUserHighestBidder && !userHasPaid && (
             <Card className="p-6 border-2 border-green-500 mb-6">
               <CardContent className="p-0 space-y-4">
                 <div className="text-center">
@@ -400,36 +484,15 @@ const ProductDetail = () => {
             </Card>
           )}
           
-          {/* If user won the auction and product is already paid, show paid status */}
-          {auctionEnded && isUserHighestBidder && productPaid && (
-            <Card className="p-6 border-2 border-green-500 mb-6">
-              <CardContent className="p-0 space-y-4">
-                <div className="text-center">
-                  <h3 className="text-xl font-semibold text-green-600">Payment Complete</h3>
-                  <p className="text-gray-600">You've successfully purchased this product.</p>
-                  <Badge className="mt-2 bg-green-600">Paid</Badge>
-                </div>
-                
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Amount Paid</p>
-                    <p className="text-xl font-bold flex items-center text-green-600">
-                      <IndianRupee className="h-4 w-4 mr-0.5" />
-                      {highestBid}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Regular bid form for ongoing auctions or if user didn't win */}
+          {(!auctionEnded || !isUserHighestBidder) && (
+            <BidForm 
+              product={product} 
+              onBidSuccess={handleBidSuccess} 
+              currentHighestBid={highestBid}
+              isWinner={auctionEnded && isUserHighestBidder}
+            />
           )}
-          
-          {/* Regular bid form */}
-          <BidForm 
-            product={product} 
-            onBidSuccess={handleBidSuccess} 
-            currentHighestBid={highestBid}
-            isWinner={auctionEnded && isUserHighestBidder}
-          />
           
           {/* Show similar products */}
           <Card className="mt-6">

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -77,7 +76,7 @@ const PaymentInfo = () => {
 
       const productIds = products.map(p => p.id);
 
-      // Get orders for farmer's products with better data
+      // Get orders for farmer's products with better data - include ALL payment statuses
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
@@ -147,18 +146,19 @@ const PaymentInfo = () => {
   useEffect(() => {
     fetchOrders();
     
-    // Set up real-time listener for new payments
+    // Set up real-time listener for new payments with improved handling
     const channel = supabase
-      .channel('farmer-payments')
+      .channel('farmer-payments-updates')
       .on('postgres_changes', 
         { 
           event: '*', 
           schema: 'public', 
           table: 'orders'
         }, 
-        () => {
+        async (payload) => {
+          console.log('Payment info received order update:', payload);
           // Refresh payments when changes occur
-          fetchOrders();
+          await fetchOrders();
         }
       )
       .subscribe();
@@ -289,7 +289,7 @@ const PaymentInfo = () => {
             <IndianRupee className="h-5 w-5 mr-2" />
             Payment History
           </CardTitle>
-          <CardDescription>Recent payments received from buyers with detailed information</CardDescription>
+          <CardDescription>All payments received from buyers with detailed information</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -305,7 +305,11 @@ const PaymentInfo = () => {
           ) : (
             <div className="space-y-4">
               {orders.map((order) => (
-                <Card key={order.id} className="border-l-4 border-l-green-500 hover:shadow-md hover:-translate-y-1 transition-all duration-300">
+                <Card key={order.id} className={`border-l-4 ${
+                  order.payment_status === 'completed' ? 'border-l-green-500' : 
+                  order.payment_status === 'pending' ? 'border-l-yellow-500' : 
+                  'border-l-red-500'
+                } hover:shadow-md hover:-translate-y-1 transition-all duration-300`}>
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex-1">
@@ -331,7 +335,9 @@ const PaymentInfo = () => {
                           <span>{order.amount?.toLocaleString()}</span>
                         </div>
                         <Badge className={getStatusColor(order.payment_status)}>
-                          {order.payment_status === 'completed' ? 'Payment Received' : order.payment_status}
+                          {order.payment_status === 'completed' ? 'Payment Received' : 
+                           order.payment_status === 'pending' ? 'Payment Pending' : 
+                           order.payment_status}
                         </Badge>
                       </div>
                     </div>
@@ -364,32 +370,34 @@ const PaymentInfo = () => {
                     )}
                     
                     <div className="flex justify-end">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleViewInvoice(order.id)}
-                            disabled={invoiceLoading === order.id}
-                            className="hover:shadow-md transition-all duration-300"
-                          >
-                            {invoiceLoading === order.id ? (
-                              <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
-                            ) : (
-                              <Eye className="h-4 w-4 mr-2" />
+                      {order.payment_status === 'completed' && (
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleViewInvoice(order.id)}
+                              disabled={invoiceLoading === order.id}
+                              className="hover:shadow-md transition-all duration-300"
+                            >
+                              {invoiceLoading === order.id ? (
+                                <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
+                              ) : (
+                                <Eye className="h-4 w-4 mr-2" />
+                              )}
+                              View Receipt
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>Payment Receipt</DialogTitle>
+                            </DialogHeader>
+                            {selectedInvoice && (
+                              <FarmerInvoice invoice={selectedInvoice} />
                             )}
-                            View Receipt
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-                          <DialogHeader>
-                            <DialogTitle>Payment Receipt</DialogTitle>
-                          </DialogHeader>
-                          {selectedInvoice && (
-                            <FarmerInvoice invoice={selectedInvoice} />
-                          )}
-                        </DialogContent>
-                      </Dialog>
+                          </DialogContent>
+                        </Dialog>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

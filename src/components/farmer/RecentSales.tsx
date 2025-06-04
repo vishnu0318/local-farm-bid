@@ -34,18 +34,19 @@ const RecentSales = () => {
     if (!user) return;
     fetchRecentSales();
     
-    // Set up real-time listener for new orders
+    // Set up real-time listener for new orders with better channel name to avoid conflicts
     const channel = supabase
-      .channel('orders-updates')
+      .channel('recent-sales-updates')
       .on('postgres_changes', 
         { 
-          event: 'INSERT', 
+          event: '*', 
           schema: 'public', 
           table: 'orders'
         }, 
-        () => {
-          // Refresh sales when new order is created
-          fetchRecentSales();
+        async (payload) => {
+          console.log('Recent sales received order update:', payload);
+          // Refresh sales when new order is created or updated
+          await fetchRecentSales();
         }
       )
       .subscribe();
@@ -156,7 +157,11 @@ const RecentSales = () => {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {recentSales.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+          </div>
+        ) : recentSales.length === 0 ? (
           <div className="text-center py-8">
             <Package className="h-12 w-12 mx-auto text-gray-400 mb-4" />
             <p className="text-gray-600">No recent sales</p>

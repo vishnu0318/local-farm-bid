@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -48,7 +49,7 @@ const FarmerDashboard = () => {
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Enhanced fetch function with real-time payment tracking
+  // Enhanced fetch function with improved real-time payment tracking
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -92,6 +93,7 @@ const FarmerDashboard = () => {
       let completedSalesCount = 0;
       let totalEarnings = 0;
       let weeklyEarnings = 0;
+      let monthlyEarnings = 0;
       let yearlyEarnings = 0;
       
       if (productIds.length > 0) {
@@ -107,7 +109,7 @@ const FarmerDashboard = () => {
         } else {
           completedSalesCount = completedOrders?.length || 0;
           
-          // Calculate earnings
+          // Calculate earnings properly
           const now = new Date();
           const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -120,6 +122,9 @@ const FarmerDashboard = () => {
             if (orderDate >= oneWeekAgo) {
               weeklyEarnings += order.amount;
             }
+            if (orderDate >= oneMonthAgo) {
+              monthlyEarnings += order.amount;
+            }
             if (orderDate >= oneYearAgo) {
               yearlyEarnings += order.amount;
             }
@@ -127,7 +132,7 @@ const FarmerDashboard = () => {
         }
       }
       
-      // 4. Recent activities from orders
+      // 4. Recent activities from orders with improved data
       const fetchRecentActivities = async () => {
         if (productIds.length === 0) return [];
         
@@ -178,11 +183,11 @@ const FarmerDashboard = () => {
       
       const activities = await fetchRecentActivities();
       
-      // Update the dashboard data state
+      // Update the dashboard data state with proper monthly earnings
       setDashboardStats({
         totalEarnings: {
           week: weeklyEarnings,
-          month: totalEarnings, // Monthly earnings (current month)
+          month: monthlyEarnings, // Use calculated monthly earnings instead of total
           year: yearlyEarnings
         },
         activeListings: activeListingsCount || 0,
@@ -199,13 +204,13 @@ const FarmerDashboard = () => {
     }
   };
 
-  // Fetch real-time dashboard data
+  // Fetch real-time dashboard data with improved subscription handling
   useEffect(() => {
     if (!user) return;
     
     fetchDashboardData();
     
-    // Set up real-time listeners for both bids and orders
+    // Set up real-time listeners for both bids and orders with improved filtering
     const setupRealtimeUpdates = async () => {
       const { data: products } = await supabase
         .from('products')
@@ -218,7 +223,7 @@ const FarmerDashboard = () => {
       
       if (productIds.length === 0) return null;
       
-      // Subscribe to both bid and order changes
+      // Subscribe to both bid and order changes with better event handling
       return supabase
         .channel('farmer-dashboard-updates')
         .on('postgres_changes', 
@@ -232,8 +237,8 @@ const FarmerDashboard = () => {
             console.log('New bid received:', payload);
             toast.success(`New bid received!`);
             setHasNewNotifications(true);
-            // Refresh dashboard data
-            fetchDashboardData();
+            // Refresh dashboard data immediately
+            await fetchDashboardData();
           }
         )
         .on('postgres_changes',
@@ -244,13 +249,13 @@ const FarmerDashboard = () => {
             filter: `product_id=in.(${productIds.join(',')})`
           },
           async (payload) => {
-            console.log('New payment received:', payload);
+            console.log('New order received:', payload);
             const newOrder = payload.new as any;
             if (newOrder.payment_status === 'completed') {
               toast.success(`Payment of ₹${newOrder.amount} received!`);
               setHasNewNotifications(true);
               // Refresh dashboard data immediately
-              fetchDashboardData();
+              await fetchDashboardData();
             }
           }
         )
@@ -268,7 +273,7 @@ const FarmerDashboard = () => {
               toast.success(`Payment of ₹${updatedOrder.amount} confirmed!`);
               setHasNewNotifications(true);
               // Refresh dashboard data immediately
-              fetchDashboardData();
+              await fetchDashboardData();
             }
           }
         )
