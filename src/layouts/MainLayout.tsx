@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -42,6 +44,7 @@ const MainLayout = () => {
           console.error('Error fetching notifications:', error);
         } else {
           setUnreadNotifications(data?.length || 0);
+          setNotifications(data || []);
         }
       }
     };
@@ -51,7 +54,7 @@ const MainLayout = () => {
     const notificationListener = supabase
       .channel('public:notifications')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {
-        if (payload.new.farmer_id === profile?.id) {
+        if (payload.new && payload.new.farmer_id === profile?.id) {
           fetchNotifications();
         }
       })
@@ -69,6 +72,25 @@ const MainLayout = () => {
       navigate('/login');
     } catch (error) {
       toast.error('Error logging out');
+    }
+  };
+
+  const markAllAsRead = async () => {
+    if (user && profile) {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('farmer_id', profile.id)
+        .eq('read', false);
+
+      if (error) {
+        console.error('Error marking notifications as read:', error);
+        toast.error('Error marking notifications as read');
+      } else {
+        setUnreadNotifications(0);
+        setNotifications([]);
+        toast.success('All notifications marked as read');
+      }
     }
   };
 
@@ -155,7 +177,11 @@ const MainLayout = () => {
             </h1>
             
             <div className="flex items-center space-x-4">
-              <NotificationsDropdown />
+              <NotificationsDropdown 
+                notifications={notifications}
+                unreadCount={unreadNotifications}
+                markAllAsRead={markAllAsRead}
+              />
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
                   <User className="h-4 w-4 text-white" />

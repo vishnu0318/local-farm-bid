@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -47,26 +48,28 @@ const App: React.FC = () => {
                   <Route path="/register" element={<Register />} />
                   
                   {/* Farmer Routes */}
-                  <Route path="/farmer" element={<MainLayout userRole="farmer" />}>
+                  <Route path="/farmer" element={<MainLayout />}>
                     <Route index element={<FarmerDashboard />} />
+                    <Route path="dashboard" element={<FarmerDashboard />} />
                     <Route path="add-product" element={<AddProduct />} />
                     <Route path="my-products" element={<MyProducts />} />
                     <Route path="payment-info" element={<PaymentInfo />} />
                     <Route path="profile" element={<FarmerProfile />} />
                     <Route path="product/:id" element={<CropDetail />} />
                     <Route path="edit-product/:id" element={<AddProduct />} />
-                    <Route path="/farmer/sales-history" element={<SalesHistory />} />
+                    <Route path="sales-history" element={<SalesHistory />} />
                   </Route>
 
                   {/* Buyer Routes */}
-                  <Route path="/buyer" element={<MainLayout userRole="buyer" />}>
+                  <Route path="/buyer" element={<MainLayout />}>
                     <Route index element={<BuyerDashboard />} />
+                    <Route path="dashboard" element={<BuyerDashboard />} />
                     <Route path="browse-products" element={<BrowseProducts />} />
                     <Route path="my-bids" element={<MyBids />} />
                     <Route path="payment-details" element={<PaymentDetails />} />
                     <Route path="profile" element={<BuyerProfile />} />
                     <Route path="product/:id" element={<CropDetail />} />
-                    <Route path="/buyer/order-history" element={<OrderHistory />} />
+                    <Route path="order-history" element={<OrderHistory />} />
                   </Route>
 
                   {/* Redirect old marketplace route to appropriate dashboard based on role */}
