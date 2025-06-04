@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -54,7 +53,7 @@ const MainLayout = () => {
     const notificationListener = supabase
       .channel('public:notifications')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {
-        if (payload.new && payload.new.farmer_id === profile?.id) {
+        if (payload.new && typeof payload.new === 'object' && 'farmer_id' in payload.new && payload.new.farmer_id === profile?.id) {
           fetchNotifications();
         }
       })
