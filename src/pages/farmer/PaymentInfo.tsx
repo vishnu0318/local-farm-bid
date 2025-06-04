@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -16,15 +17,15 @@ interface Order {
   amount: number;
   payment_method: string;
   payment_status: string;
-  payment_date: string;
-  transaction_id: string;
-  created_at: string;
+  payment_date: string | null;
+  transaction_id: string | null;
+  created_at: string | null;
   product: {
     name: string;
     quantity: number;
     unit: string;
     description: string;
-  };
+  } | null;
   buyer: {
     name: string;
     email: string;
@@ -35,7 +36,7 @@ interface Order {
     city: string;
     state: string;
     postalCode: string;
-  };
+  } | null;
 }
 
 const PaymentInfo = () => {
@@ -93,7 +94,7 @@ const PaymentInfo = () => {
 
       if (ordersError) throw ordersError;
 
-      // Get buyer details for each order
+      // Get buyer details for each order and properly type the data
       const ordersWithBuyers = await Promise.all(
         (ordersData || []).map(async (order) => {
           const { data: buyer } = await supabase
@@ -102,10 +103,31 @@ const PaymentInfo = () => {
             .eq('id', order.buyer_id)
             .single();
 
+          // Properly handle delivery_address type casting
+          let deliveryAddress = null;
+          if (order.delivery_address && typeof order.delivery_address === 'object') {
+            deliveryAddress = order.delivery_address as {
+              addressLine1: string;
+              addressLine2?: string;
+              city: string;
+              state: string;
+              postalCode: string;
+            };
+          }
+
           return {
-            ...order,
-            buyer: buyer || { name: 'Unknown Buyer', email: '' }
-          };
+            id: order.id,
+            product_id: order.product_id,
+            amount: order.amount,
+            payment_method: order.payment_method,
+            payment_status: order.payment_status,
+            payment_date: order.payment_date,
+            transaction_id: order.transaction_id,
+            created_at: order.created_at,
+            product: order.product,
+            buyer: buyer || { name: 'Unknown Buyer', email: '' },
+            delivery_address: deliveryAddress
+          } as Order;
         })
       );
 
@@ -295,7 +317,7 @@ const PaymentInfo = () => {
                           </div>
                           <div className="flex items-center">
                             <Calendar className="h-4 w-4 mr-1" />
-                            <span>{new Date(order.payment_date || order.created_at).toLocaleDateString()}</span>
+                            <span>{new Date(order.payment_date || order.created_at || '').toLocaleDateString()}</span>
                           </div>
                           <div className="flex items-center">
                             <Package className="h-4 w-4 mr-1" />
