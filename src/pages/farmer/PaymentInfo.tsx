@@ -1,12 +1,14 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { IndianRupee } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { IndianRupee, Eye, Package, User, Calendar, Download } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { generateInvoice } from '@/services/paymentService';
+import FarmerInvoice from '@/components/farmer/FarmerInvoice';
 
 interface Order {
   id: string;
@@ -21,10 +23,18 @@ interface Order {
     name: string;
     quantity: number;
     unit: string;
+    description: string;
   };
   buyer: {
     name: string;
     email: string;
+  };
+  delivery_address?: {
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    postalCode: string;
   };
 }
 
@@ -42,6 +52,8 @@ const PaymentInfo = () => {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     if (!user?.id) return;
@@ -64,7 +76,7 @@ const PaymentInfo = () => {
 
       const productIds = products.map(p => p.id);
 
-      // Get orders for farmer's products
+      // Get orders for farmer's products with better data
       const { data: ordersData, error: ordersError } = await supabase
         .from('orders')
         .select(`
@@ -72,7 +84,8 @@ const PaymentInfo = () => {
           product:product_id(
             name,
             quantity,
-            unit
+            unit,
+            description
           )
         `)
         .in('product_id', productIds)
@@ -111,7 +124,53 @@ const PaymentInfo = () => {
 
   useEffect(() => {
     fetchOrders();
+    
+    // Set up real-time listener for new payments
+    const channel = supabase
+      .channel('farmer-payments')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'orders'
+        }, 
+        () => {
+          // Refresh payments when changes occur
+          fetchOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
+
+  const handleViewInvoice = async (orderId: string) => {
+    try {
+      setInvoiceLoading(orderId);
+      const { success, data, error } = await generateInvoice(orderId);
+      
+      if (success && data) {
+        setSelectedInvoice(data);
+      } else {
+        toast({
+          title: "Error",
+          description: error || "Failed to generate invoice",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate invoice",
+        variant: "destructive"
+      });
+    } finally {
+      setInvoiceLoading(null);
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -202,37 +261,116 @@ const PaymentInfo = () => {
         </form>
       </Card>
 
-      <Card>
+      <Card className="hover:shadow-lg transition-shadow duration-300">
         <CardHeader>
-          <CardTitle>Payment History</CardTitle>
-          <CardDescription>Recent payments received from buyers</CardDescription>
+          <CardTitle className="flex items-center">
+            <IndianRupee className="h-5 w-5 mr-2" />
+            Payment History
+          </CardTitle>
+          <CardDescription>Recent payments received from buyers with detailed information</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <p className="text-center py-8 text-gray-500">Loading payment history...</p>
+            <div className="flex justify-center py-8">
+              <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+            </div>
           ) : orders.length === 0 ? (
-            <p className="text-center py-8 text-gray-500">No payments received yet</p>
+            <div className="text-center py-12">
+              <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
+              <p className="text-gray-500 text-lg">No payments received yet</p>
+              <p className="text-gray-400 text-sm">Start selling to see your payment history here</p>
+            </div>
           ) : (
             <div className="space-y-4">
               {orders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <p className="font-medium">{order.product?.name}</p>
-                    <p className="text-sm text-gray-500">Buyer: {order.buyer?.name}</p>
-                    <p className="text-sm text-gray-500">Date: {new Date(order.payment_date || order.created_at).toLocaleDateString()}</p>
-                    <p className="text-sm text-gray-500">Transaction: {order.transaction_id}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-center justify-end font-semibold text-lg">
-                      <IndianRupee className="h-4 w-4 mr-1" />
-                      {order.amount?.toLocaleString()}
+                <Card key={order.id} className="border-l-4 border-l-green-500 hover:shadow-md hover:-translate-y-1 transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-800 mb-1">{order.product?.name}</h3>
+                        <div className="flex items-center text-sm text-gray-600 space-x-4">
+                          <div className="flex items-center">
+                            <User className="h-4 w-4 mr-1" />
+                            <span>{order.buyer?.name}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 mr-1" />
+                            <span>{new Date(order.payment_date || order.created_at).toLocaleDateString()}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <Package className="h-4 w-4 mr-1" />
+                            <span>{order.product?.quantity} {order.product?.unit}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end font-bold text-2xl text-green-600 mb-2">
+                          <IndianRupee className="h-6 w-6 mr-1" />
+                          <span>{order.amount?.toLocaleString()}</span>
+                        </div>
+                        <Badge className={getStatusColor(order.payment_status)}>
+                          {order.payment_status === 'completed' ? 'Payment Received' : order.payment_status}
+                        </Badge>
+                      </div>
                     </div>
-                    <Badge className={getStatusColor(order.payment_status)}>
-                      {order.payment_status === 'completed' ? 'Payment Received' : order.payment_status}
-                    </Badge>
-                    <p className="text-xs text-gray-500 mt-1">{order.payment_method.toUpperCase()}</p>
-                  </div>
-                </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-sm">
+                      <div>
+                        <span className="text-gray-600 font-medium">Payment Method:</span>
+                        <p className="mt-1">{order.payment_method.toUpperCase()}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Transaction ID:</span>
+                        <p className="mt-1 font-mono text-xs">{order.transaction_id}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600 font-medium">Buyer Email:</span>
+                        <p className="mt-1">{order.buyer?.email}</p>
+                      </div>
+                    </div>
+
+                    {order.delivery_address && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <span className="text-gray-600 font-medium text-sm">Delivery Address:</span>
+                        <p className="mt-1 text-sm">
+                          {order.delivery_address.addressLine1}
+                          {order.delivery_address.addressLine2 && `, ${order.delivery_address.addressLine2}`}
+                          <br />
+                          {order.delivery_address.city}, {order.delivery_address.state} - {order.delivery_address.postalCode}
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-end">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleViewInvoice(order.id)}
+                            disabled={invoiceLoading === order.id}
+                            className="hover:shadow-md transition-all duration-300"
+                          >
+                            {invoiceLoading === order.id ? (
+                              <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
+                            ) : (
+                              <Eye className="h-4 w-4 mr-2" />
+                            )}
+                            View Receipt
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle>Payment Receipt</DialogTitle>
+                          </DialogHeader>
+                          {selectedInvoice && (
+                            <FarmerInvoice invoice={selectedInvoice} />
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}

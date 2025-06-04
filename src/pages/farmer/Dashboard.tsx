@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from '@/context/AuthContext';
 import MarketPriceAnalytics from '@/components/farmer/MarketPriceAnalytics';
 import RecentSales from '@/components/farmer/RecentSales';
-import { IndianRupee, TrendingUp, ShoppingBasket, Users, Bell } from 'lucide-react';
+import { IndianRupee, TrendingUp, ShoppingBasket, Users, Bell, Download } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { Bid, Product } from '@/types/marketplace';
@@ -48,177 +48,177 @@ const FarmerDashboard = () => {
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Fetch real-time dashboard data
-  useEffect(() => {
-    if (!user) return;
-    
-    const fetchDashboardData = async () => {
-      try {
-        setLoading(true);
+  // Enhanced fetch function with real-time payment tracking
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      
+      // 1. Fetch active listings count
+      const { count: activeListingsCount, error: activeListingsError } = await supabase
+        .from('products')
+        .select('*', { count: 'exact', head: true })
+        .eq('farmer_id', user.id)
+        .eq('available', true);
         
-        // 1. Fetch active listings count
-        const { count: activeListingsCount, error: activeListingsError } = await supabase
-          .from('products')
-          .select('*', { count: 'exact', head: true })
-          .eq('farmer_id', user.id)
-          .eq('available', true);
-          
-        if (activeListingsError) {
-          console.error('Error fetching active listings:', activeListingsError);
-        }
-        
-        // 2. Fetch pending bids (products with bids)
-        const { data: productsWithBids, error: bidsError } = await supabase
-          .from('products')
-          .select(`
-            id,
-            name,
-            bids:bids(count)
-          `)
-          .eq('farmer_id', user.id)
-          .eq('available', true)
-          .not('bids', 'is', null);
-          
-        if (bidsError) {
-          console.error('Error fetching products with bids:', bidsError);
-        }
-        
-        // 3. Fetch completed sales
-        const { count: completedSalesCount, error: salesError } = await supabase
-          .from('products')
-          .select('*', { count: 'exact', head: true })
-          .eq('farmer_id', user.id)
-          .eq('available', false)
-          .eq('paid', true);
-          
-        if (salesError) {
-          console.error('Error fetching completed sales:', salesError);
-        }
-        
-        // 4. Calculate earnings
-        const { data: earnings, error: earningsError } = await supabase
-          .from('products')
-          .select(`
-            id,
-            price,
-            bids (amount)
-          `)
-          .eq('farmer_id', user.id)
-          .eq('paid', true);
-          
-        if (earningsError) {
-          console.error('Error fetching earnings:', earningsError);
-        }
-        
-        // Calculate total earnings
-        let totalEarnings = 0;
-        if (earnings) {
-          earnings.forEach(product => {
-            // If product has bids, use the highest bid amount, otherwise use the product price
-            if (product.bids && product.bids.length > 0) {
-              const highestBid = Math.max(...product.bids.map((bid: any) => bid.amount));
-              totalEarnings += highestBid;
-            } else {
-              totalEarnings += product.price;
-            }
-          });
-        }
-        
-        // 5. Recent activities
-        const fetchRecentActivities = async () => {
-          // Get recent bids across all farmer's products
-          const { data: products, error: productsError } = await supabase
-            .from('products')
-            .select('id, name')
-            .eq('farmer_id', user.id);
-            
-          if (productsError) {
-            console.error('Error fetching products for activities:', productsError);
-            return [];
-          }
-          
-          if (!products || products.length === 0) return [];
-          
-          const productIds = products.map(p => p.id);
-          
-          // Get recent bids
-          const { data: recentBids, error: recentBidsError } = await supabase
-            .from('bids')
-            .select(`
-              id,
-              bidder_name,
-              amount,
-              created_at,
-              product_id
-            `)
-            .in('product_id', productIds)
-            .order('created_at', { ascending: false })
-            .limit(5);
-            
-          if (recentBidsError) {
-            console.error('Error fetching recent bids:', recentBidsError);
-            return [];
-          }
-          
-          // Transform bids to activities
-          const bidActivities: RecentActivity[] = (recentBids || []).map(bid => {
-            const productName = products.find(p => p.id === bid.product_id)?.name || 'Product';
-            return {
-              id: `bid-${bid.id}`,
-              type: 'new_bid',
-              title: 'New bid received',
-              description: `${productName} - ₹${bid.amount} by ${bid.bidder_name}`,
-              time: bid.created_at,
-              timeAgo: formatDistanceToNow(new Date(bid.created_at), { addSuffix: true })
-            };
-          });
-          
-          return bidActivities;
-        };
-        
-        const activities = await fetchRecentActivities();
-        
-        // Update the dashboard data state
-        setDashboardStats({
-          totalEarnings: {
-            week: totalEarnings * 0.25, // Example calculation - replace with actual data
-            month: totalEarnings,
-            year: totalEarnings * 12 // Example calculation - replace with actual data
-          },
-          activeListings: activeListingsCount || 0,
-          pendingBids: productsWithBids?.length || 0,
-          completedSales: completedSalesCount || 0
-        });
-        
-        setRecentActivities(activities);
-        setLoading(false);
-        
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-        setLoading(false);
+      if (activeListingsError) {
+        console.error('Error fetching active listings:', activeListingsError);
       }
-    };
-    
-    fetchDashboardData();
-    
-    // Subscribe to real-time updates for bids on farmer's products
-    const setupRealtimeBids = async () => {
-      // Get farmer's products first
-      const { data: products, error } = await supabase
+      
+      // 2. Fetch pending bids count (products with active bids)
+      const { data: productsWithBids, error: bidsError } = await supabase
+        .from('products')
+        .select(`
+          id,
+          name,
+          bids:bids(count)
+        `)
+        .eq('farmer_id', user.id)
+        .eq('available', true);
+        
+      if (bidsError) {
+        console.error('Error fetching products with bids:', bidsError);
+      }
+      
+      const pendingBidsCount = productsWithBids?.filter(p => p.bids && p.bids.length > 0).length || 0;
+      
+      // 3. Fetch completed sales count from orders table
+      const { data: farmerProducts } = await supabase
         .from('products')
         .select('id')
         .eq('farmer_id', user.id);
         
-      if (error || !products) {
-        console.error('Error fetching products for realtime updates:', error);
-        return null;
+      const productIds = farmerProducts?.map(p => p.id) || [];
+      
+      let completedSalesCount = 0;
+      let totalEarnings = 0;
+      let weeklyEarnings = 0;
+      let yearlyEarnings = 0;
+      
+      if (productIds.length > 0) {
+        // Get completed orders (payments received)
+        const { data: completedOrders, error: ordersError } = await supabase
+          .from('orders')
+          .select('*')
+          .in('product_id', productIds)
+          .eq('payment_status', 'completed');
+          
+        if (ordersError) {
+          console.error('Error fetching completed orders:', ordersError);
+        } else {
+          completedSalesCount = completedOrders?.length || 0;
+          
+          // Calculate earnings
+          const now = new Date();
+          const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          
+          completedOrders?.forEach(order => {
+            const orderDate = new Date(order.payment_date || order.created_at);
+            totalEarnings += order.amount;
+            
+            if (orderDate >= oneWeekAgo) {
+              weeklyEarnings += order.amount;
+            }
+            if (orderDate >= oneYearAgo) {
+              yearlyEarnings += order.amount;
+            }
+          });
+        }
       }
+      
+      // 4. Recent activities from orders
+      const fetchRecentActivities = async () => {
+        if (productIds.length === 0) return [];
+        
+        const { data: recentOrders } = await supabase
+          .from('orders')
+          .select(`
+            *,
+            product:product_id(name)
+          `)
+          .in('product_id', productIds)
+          .eq('payment_status', 'completed')
+          .order('payment_date', { ascending: false })
+          .limit(3);
+          
+        const orderActivities: RecentActivity[] = (recentOrders || []).map(order => ({
+          id: `payment-${order.id}`,
+          type: 'payment_received',
+          title: 'Payment received',
+          description: `${order.product?.name || 'Product'} - ₹${order.amount}`,
+          time: order.payment_date || order.created_at,
+          timeAgo: formatDistanceToNow(new Date(order.payment_date || order.created_at), { addSuffix: true })
+        }));
+        
+        // Also get recent bids
+        const { data: recentBids } = await supabase
+          .from('bids')
+          .select(`
+            *,
+            product:product_id(name)
+          `)
+          .in('product_id', productIds)
+          .order('created_at', { ascending: false })
+          .limit(2);
+          
+        const bidActivities: RecentActivity[] = (recentBids || []).map(bid => ({
+          id: `bid-${bid.id}`,
+          type: 'new_bid',
+          title: 'New bid received',
+          description: `${bid.product?.name || 'Product'} - ₹${bid.amount} by ${bid.bidder_name}`,
+          time: bid.created_at,
+          timeAgo: formatDistanceToNow(new Date(bid.created_at), { addSuffix: true })
+        }));
+        
+        return [...orderActivities, ...bidActivities]
+          .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+          .slice(0, 5);
+      };
+      
+      const activities = await fetchRecentActivities();
+      
+      // Update the dashboard data state
+      setDashboardStats({
+        totalEarnings: {
+          week: weeklyEarnings,
+          month: totalEarnings, // Monthly earnings (current month)
+          year: yearlyEarnings
+        },
+        activeListings: activeListingsCount || 0,
+        pendingBids: pendingBidsCount,
+        completedSales: completedSalesCount
+      });
+      
+      setRecentActivities(activities);
+      setLoading(false);
+      
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      setLoading(false);
+    }
+  };
+
+  // Fetch real-time dashboard data
+  useEffect(() => {
+    if (!user) return;
+    
+    fetchDashboardData();
+    
+    // Set up real-time listeners for both bids and orders
+    const setupRealtimeUpdates = async () => {
+      const { data: products } = await supabase
+        .from('products')
+        .select('id')
+        .eq('farmer_id', user.id);
+        
+      if (!products) return null;
       
       const productIds = products.map(p => p.id);
       
       if (productIds.length === 0) return null;
       
-      // Subscribe to bid changes
+      // Subscribe to both bid and order changes
       return supabase
         .channel('farmer-dashboard-updates')
         .on('postgres_changes', 
@@ -229,46 +229,55 @@ const FarmerDashboard = () => {
             filter: `product_id=in.(${productIds.join(',')})` 
           }, 
           async (payload) => {
-            console.log('New bid received in dashboard:', payload);
-            const newBid = payload.new as Bid;
-            
-            // Get product name
-            const { data: product } = await supabase
-              .from('products')
-              .select('name')
-              .eq('id', newBid.product_id)
-              .single();
-              
-            // Show notification
-            toast.success(`New bid of ₹${newBid.amount} placed on ${product?.name || 'your product'} by ${newBid.bidder_name}`);
+            console.log('New bid received:', payload);
+            toast.success(`New bid received!`);
             setHasNewNotifications(true);
-            
-            // Update recent activities
-            const newActivity: RecentActivity = {
-              id: `bid-${newBid.id}`,
-              type: 'new_bid',
-              title: 'New bid received',
-              description: `${product?.name || 'Your product'} - ₹${newBid.amount} by ${newBid.bidder_name}`,
-              time: newBid.created_at,
-              timeAgo: formatDistanceToNow(new Date(newBid.created_at), { addSuffix: true })
-            };
-            
-            setRecentActivities(prev => [newActivity, ...prev].slice(0, 5));
-            
-            // Update dashboard stats
-            setDashboardStats(prev => ({
-              ...prev,
-              pendingBids: prev.pendingBids + 1
-            }));
+            // Refresh dashboard data
+            fetchDashboardData();
+          }
+        )
+        .on('postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'orders',
+            filter: `product_id=in.(${productIds.join(',')})`
+          },
+          async (payload) => {
+            console.log('New payment received:', payload);
+            const newOrder = payload.new as any;
+            if (newOrder.payment_status === 'completed') {
+              toast.success(`Payment of ₹${newOrder.amount} received!`);
+              setHasNewNotifications(true);
+              // Refresh dashboard data immediately
+              fetchDashboardData();
+            }
+          }
+        )
+        .on('postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'orders',
+            filter: `product_id=in.(${productIds.join(',')})`
+          },
+          async (payload) => {
+            console.log('Order updated:', payload);
+            const updatedOrder = payload.new as any;
+            if (updatedOrder.payment_status === 'completed') {
+              toast.success(`Payment of ₹${updatedOrder.amount} confirmed!`);
+              setHasNewNotifications(true);
+              // Refresh dashboard data immediately
+              fetchDashboardData();
+            }
           }
         )
         .subscribe();
     };
     
-    // Execute the setupRealtimeBids function and store the channel
     let channel: any = null;
     
-    setupRealtimeBids().then(result => {
+    setupRealtimeUpdates().then(result => {
       channel = result;
     });
     
@@ -293,11 +302,11 @@ const FarmerDashboard = () => {
         </div>
         <div className="relative mt-4 md:mt-0">
           <Bell 
-            className={`h-6 w-6 cursor-pointer ${hasNewNotifications ? 'text-red-500' : 'text-gray-400'}`}
+            className={`h-6 w-6 cursor-pointer hover:scale-110 transition-transform ${hasNewNotifications ? 'text-red-500' : 'text-gray-400'}`}
             onClick={() => setHasNewNotifications(false)}
           />
           {hasNewNotifications && (
-            <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full flex items-center justify-center bg-red-500">
+            <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 rounded-full flex items-center justify-center bg-red-500 animate-pulse">
               !
             </Badge>
           )}
@@ -305,7 +314,7 @@ const FarmerDashboard = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card>
+        <Card className="hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Monthly Earnings</CardTitle>
           </CardHeader>
@@ -316,12 +325,12 @@ const FarmerDashboard = () => {
             </div>
             <p className="text-xs text-green-600 flex items-center mt-1">
               <TrendingUp className="h-3 w-3 mr-1" />
-              <span>+12% from last month</span>
+              <span>Updated in real-time</span>
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Active Listings</CardTitle>
           </CardHeader>
@@ -331,7 +340,7 @@ const FarmerDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Pending Bids</CardTitle>
           </CardHeader>
@@ -341,7 +350,7 @@ const FarmerDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500">Completed Sales</CardTitle>
           </CardHeader>
