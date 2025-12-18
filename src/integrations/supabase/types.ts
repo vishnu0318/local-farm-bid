@@ -14,7 +14,304 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bids: {
+        Row: {
+          bid_price: number
+          buyer_id: string
+          counter_price: number | null
+          created_at: string
+          farmer_id: string
+          id: string
+          message: string | null
+          product_id: string
+          quantity: number
+          status: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          bid_price: number
+          buyer_id: string
+          counter_price?: number | null
+          created_at?: string
+          farmer_id: string
+          id?: string
+          message?: string | null
+          product_id: string
+          quantity: number
+          status?: string
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          bid_price?: number
+          buyer_id?: string
+          counter_price?: number | null
+          created_at?: string
+          farmer_id?: string
+          id?: string
+          message?: string | null
+          product_id?: string
+          quantity?: number
+          status?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bids_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bids_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bids_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean | null
+          message: string
+          related_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message: string
+          related_id?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          message?: string
+          related_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          farmer_id: string
+          harvest_date: string | null
+          id: string
+          images: string[] | null
+          is_available: boolean | null
+          location: string | null
+          minimum_order: number | null
+          name: string
+          price_per_unit: number
+          product_type: string
+          quantity: number
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          farmer_id: string
+          harvest_date?: string | null
+          id?: string
+          images?: string[] | null
+          is_available?: boolean | null
+          location?: string | null
+          minimum_order?: number | null
+          name: string
+          price_per_unit: number
+          product_type: string
+          quantity: number
+          unit?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          farmer_id?: string
+          harvest_date?: string | null
+          id?: string
+          images?: string[] | null
+          is_available?: boolean | null
+          location?: string | null
+          minimum_order?: number | null
+          name?: string
+          price_per_unit?: number
+          product_type?: string
+          quantity?: number
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          address: string | null
+          avatar_url: string | null
+          city: string | null
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          phone: string | null
+          pincode: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          state: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          avatar_url?: string | null
+          city?: string | null
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id: string
+          phone?: string | null
+          pincode?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          state?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          avatar_url?: string | null
+          city?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          phone?: string | null
+          pincode?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          state?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sales: {
+        Row: {
+          bid_id: string
+          buyer_id: string
+          created_at: string
+          delivery_address: string | null
+          delivery_status: string | null
+          farmer_id: string
+          id: string
+          payment_id: string | null
+          payment_status: string
+          price_per_unit: number
+          product_id: string
+          quantity: number
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          bid_id: string
+          buyer_id: string
+          created_at?: string
+          delivery_address?: string | null
+          delivery_status?: string | null
+          farmer_id: string
+          id?: string
+          payment_id?: string | null
+          payment_status?: string
+          price_per_unit: number
+          product_id: string
+          quantity: number
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          bid_id?: string
+          buyer_id?: string
+          created_at?: string
+          delivery_address?: string | null
+          delivery_status?: string | null
+          farmer_id?: string
+          id?: string
+          payment_id?: string | null
+          payment_status?: string
+          price_per_unit?: number
+          product_id?: string
+          quantity?: number
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_bid_id_fkey"
+            columns: ["bid_id"]
+            isOneToOne: false
+            referencedRelation: "bids"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_buyer_id_fkey"
+            columns: ["buyer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_farmer_id_fkey"
+            columns: ["farmer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sales_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +320,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_role: "farmer" | "buyer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +447,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      user_role: ["farmer", "buyer"],
+    },
   },
 } as const
