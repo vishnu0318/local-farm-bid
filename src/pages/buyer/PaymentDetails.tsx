@@ -21,7 +21,7 @@ import jsPDF from "jspdf";
 // Define a type that extends Product to include winningBid property
 interface ProductWithWinningBid extends Product {
   winningBid?: number;
-  bids?: { amount: number; bidder_id: string }[];
+  bids?: { amount: number; buyer_id: string }[];
 }
 
 // Form validation schemas
@@ -80,7 +80,7 @@ const PaymentDetails = () => {
           .from('products')
           .select(`
             *,
-            bids(amount, bidder_id)
+            bids(amount, buyer_id)
           `)
           .eq('id', productId)
           .single();
@@ -93,7 +93,7 @@ const PaymentDetails = () => {
           const sortedBids = [...productData.bids].sort((a, b) => b.amount - a.amount);
           const highestBid = sortedBids[0];
 
-          if (highestBid.bidder_id !== user?.id) {
+          if (highestBid.buyer_id !== user?.id) {
             toast.error("You are not the highest bidder for this product");
             navigate('/buyer/my-bids');
             return;
@@ -103,7 +103,7 @@ const PaymentDetails = () => {
           setProduct({
             ...productData,
             winningBid: highestBid.amount
-          });
+          } as ProductWithWinningBid);
 
           setFarmerId(productData?.farmer_id);
 

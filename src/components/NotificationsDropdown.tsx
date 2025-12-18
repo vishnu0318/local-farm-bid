@@ -32,17 +32,17 @@ const NotificationsDropdown = ({
   isMobile = false,
   onNotificationUpdate = () => {}
 }: NotificationsDropdownProps) => {
-  const actualUnreadCount = notifications.filter(n => !n.read).length;
+  const actualUnreadCount = notifications.filter(n => !n.is_read).length;
   const displayUnreadCount = unreadCount || actualUnreadCount;
 
   const handleMarkAllAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter(n => !n.read);
+      const unreadNotifications = notifications.filter(n => !n.is_read);
       if (unreadNotifications.length === 0) return;
 
       const { error } = await supabase
         .from('notifications')
-        .update({ read: true })
+        .update({ is_read: true })
         .in('id', unreadNotifications.map(n => n.id));
 
       if (error) throw error;
@@ -57,11 +57,11 @@ const NotificationsDropdown = ({
   };
 
   const handleNotificationClick = async (notification: Notification) => {
-    if (!notification.read) {
+    if (!notification.is_read) {
       try {
         const { error } = await supabase
           .from('notifications')
-          .update({ read: true })
+          .update({ is_read: true })
           .eq('id', notification.id);
 
         if (error) throw error;
@@ -113,14 +113,14 @@ const NotificationsDropdown = ({
             >
               <div className="flex justify-between items-start w-full">
                 <div className="flex-1">
-                  <p className={`text-sm ${!notification.read ? 'font-semibold' : 'font-normal'}`}>
+                  <p className={`text-sm ${!notification.is_read ? 'font-semibold' : 'font-normal'}`}>
                     {notification.message}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
                     {new Date(notification.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                {!notification.read && (
+                {!notification.is_read && (
                   <div className="h-2 w-2 bg-blue-500 rounded-full ml-2 mt-1"></div>
                 )}
               </div>

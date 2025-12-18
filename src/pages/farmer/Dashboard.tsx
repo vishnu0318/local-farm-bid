@@ -90,32 +90,32 @@ const FarmerDashboard = () => {
       let yearlyEarnings = 0;
       
       if (productIds.length > 0) {
-        // Get completed orders
-        const { data: completedOrders } = await supabase
-          .from('orders')
+        // Get completed sales
+        const { data: completedSales } = await supabase
+          .from('sales')
           .select('*')
           .in('product_id', productIds)
           .eq('payment_status', 'completed');
           
-        if (completedOrders) {
-          completedSalesCount = completedOrders.length;
+        if (completedSales) {
+          completedSalesCount = completedSales.length;
           
           const now = new Date();
           const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
           const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
           const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
           
-          completedOrders.forEach(order => {
-            const orderDate = new Date(order.payment_date || order.created_at);
+          completedSales.forEach(sale => {
+            const saleDate = new Date(sale.created_at);
             
-            if (orderDate >= oneWeekAgo) {
-              weeklyEarnings += order.amount;
+            if (saleDate >= oneWeekAgo) {
+              weeklyEarnings += sale.total_amount;
             }
-            if (orderDate >= oneMonthAgo) {
-              monthlyEarnings += order.amount;
+            if (saleDate >= oneMonthAgo) {
+              monthlyEarnings += sale.total_amount;
             }
-            if (orderDate >= oneYearAgo) {
-              yearlyEarnings += order.amount;
+            if (saleDate >= oneYearAgo) {
+              yearlyEarnings += sale.total_amount;
             }
           });
         }
@@ -125,27 +125,27 @@ const FarmerDashboard = () => {
       const activities: RecentActivity[] = [];
       
       if (productIds.length > 0) {
-        // Recent payments
-        const { data: recentOrders } = await supabase
-          .from('orders')
+        // Recent payments from sales
+        const { data: recentSales } = await supabase
+          .from('sales')
           .select(`
             *,
-            product:product_id(name)
+            product:products(name)
           `)
           .in('product_id', productIds)
           .eq('payment_status', 'completed')
-          .order('payment_date', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(3);
           
-        if (recentOrders) {
-          recentOrders.forEach(order => {
+        if (recentSales) {
+          recentSales.forEach(sale => {
             activities.push({
-              id: `payment-${order.id}`,
+              id: `payment-${sale.id}`,
               type: 'payment_received',
               title: 'Payment received',
-              description: `${order.product?.name || 'Product'} - ₹${order.amount}`,
-              time: order.payment_date || order.created_at,
-              timeAgo: formatDistanceToNow(new Date(order.payment_date || order.created_at), { addSuffix: true })
+              description: `${sale.product?.name || 'Product'} - ₹${sale.total_amount}`,
+              time: sale.created_at,
+              timeAgo: formatDistanceToNow(new Date(sale.created_at), { addSuffix: true })
             });
           });
         }
@@ -247,14 +247,14 @@ const FarmerDashboard = () => {
             {
               event: '*',
               schema: 'public',
-              table: 'orders'
+              table: 'sales'
             },
             async (payload) => {
-              console.log('Order change detected:', payload);
-              const orderData = payload.new as any;
-              if (orderData && productIds.includes(orderData.product_id)) {
-                if (orderData.payment_status === 'completed') {
-                  toast.success(`Payment of ₹${orderData.amount} received!`);
+              console.log('Sale change detected:', payload);
+              const saleData = payload.new as any;
+              if (saleData && productIds.includes(saleData.product_id)) {
+                if (saleData.payment_status === 'completed') {
+                  toast.success(`Payment of ₹${saleData.total_amount} received!`);
                   setHasNewNotifications(true);
                   await fetchDashboardData();
                 }

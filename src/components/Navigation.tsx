@@ -24,11 +24,8 @@ const Navigation = () => {
     try {
       let query = supabase.from('notifications').select('*');
       
-      if (userRole === 'farmer') {
-        query = query.eq('farmer_id', user.id);
-      } else if (userRole === 'buyer') {
-        query = query.eq('bidder_id', user.id);
-      }
+      // Use user_id for all notification queries
+      query = query.eq('user_id', user.id);
       
       const { data } = await query.order('created_at', { ascending: false }).limit(10);
       setNotifications(data || []);

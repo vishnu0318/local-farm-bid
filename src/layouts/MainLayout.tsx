@@ -37,8 +37,8 @@ const MainLayout = () => {
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .eq('farmer_id', profile.id)
-          .eq('read', false);
+          .eq('user_id', profile.id)
+          .eq('is_read', false);
 
         if (error) {
           console.error('Error fetching notifications:', error);
@@ -54,7 +54,7 @@ const MainLayout = () => {
     const notificationListener = supabase
       .channel('public:notifications')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, (payload) => {
-        if (payload.new && typeof payload.new === 'object' && 'farmer_id' in payload.new && payload.new.farmer_id === profile?.id) {
+        if (payload.new && typeof payload.new === 'object' && 'user_id' in payload.new && payload.new.user_id === profile?.id) {
           fetchNotifications();
         }
       })
@@ -79,9 +79,9 @@ const MainLayout = () => {
     if (user && profile) {
       const { error } = await supabase
         .from('notifications')
-        .update({ read: true })
-        .eq('farmer_id', profile.id)
-        .eq('read', false);
+        .update({ is_read: true })
+        .eq('user_id', profile.id)
+        .eq('is_read', false);
 
       if (error) {
         console.error('Error marking notifications as read:', error);
