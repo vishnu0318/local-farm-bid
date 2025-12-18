@@ -28,7 +28,7 @@ export interface Product {
 export interface Bid {
   id: string;
   product_id: string;
-  bidder_id: string;
+  buyer_id: string;
   bidder_name: string;
   amount: number;
   created_at: string;
@@ -69,14 +69,11 @@ export interface Order {
 
 export interface Notification {
   id: string;
-  type: 'new_bid' | 'auction_ended' | 'payment_received';
+  type: string;
+  title?: string;
   message: string;
-  read: boolean;
+  is_read: boolean;
   created_at: string;
-  product_id?: string;
-  bid_id?: string;
-  bidder_id?: string;
-  bidder_name?: string;
-  bid_amount?: number;
-  farmer_id?: string;
+  user_id?: string;
+  related_id?: string;
 }

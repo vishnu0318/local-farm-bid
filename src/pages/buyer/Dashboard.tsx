@@ -32,7 +32,7 @@ const BuyerDashboard = () => {
         const { data: bidsData, error: bidsError } = await supabase
           .from('bids')
           .select('*, product:product_id(*)')
-          .eq('bidder_id', user.id)
+          .eq('buyer_id', user.id)
           .order('created_at', { ascending: false });
 
         if (bidsError) throw bidsError;
@@ -55,13 +55,13 @@ const BuyerDashboard = () => {
               // Check if this user is the highest bidder
               const { data: highestBid } = await supabase
                 .from('bids')
-                .select('bidder_id, amount')
+                .select('buyer_id, amount')
                 .eq('product_id', bid.product_id)
                 .order('amount', { ascending: false })
                 .limit(1)
                 .single();
               
-              if (highestBid && highestBid.bidder_id === user.id) {
+              if (highestBid && highestBid.buyer_id === user.id) {
                 wonAuctionsCount++;
               }
             } else {
@@ -115,7 +115,7 @@ const BuyerDashboard = () => {
           event: '*', 
           schema: 'public', 
           table: 'bids',
-          filter: `bidder_id=eq.${user?.id}`
+          filter: `buyer_id=eq.${user?.id}`
         }, 
         () => {
           // Refresh data when there's a change to the user's bids

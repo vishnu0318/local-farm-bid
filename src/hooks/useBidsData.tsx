@@ -34,17 +34,17 @@ export const useBidsData = () => {
           const enrichedBids = await Promise.all(userBids.map(async (bid) => {
             const { data: highestBid } = await supabase
               .from('bids')
-              .select('bidder_id, amount')
+              .select('buyer_id, amount')
               .eq('product_id', bid.product_id)
               .order('amount', { ascending: false })
               .limit(1)
               .single();
               
-            const isHighestBidder = highestBid && highestBid.bidder_id === user.id;
+            const isHighestBidder = highestBid && highestBid.buyer_id === user.id;
             
             // Add the highest_bidder_id property to the product
             if (bid.product) {
-              bid.product.highest_bidder_id = isHighestBidder ? user.id : (highestBid?.bidder_id || '');
+              bid.product.highest_bidder_id = isHighestBidder ? user.id : (highestBid?.buyer_id || '');
             }
             
             return bid;
@@ -75,9 +75,9 @@ export const useBidsData = () => {
         }, 
         (payload: any) => {
           // Check if this is a bid by the current user or on a product the user has bid on
-          const newData = payload.new as { bidder_id?: string; product_id?: string } | null;
+          const newData = payload.new as { buyer_id?: string; product_id?: string } | null;
           const isRelatedToBid = 
-            newData && newData.bidder_id === user?.id ||
+            newData && newData.buyer_id === user?.id ||
             bids.some(bid => bid.product_id === (newData && newData.product_id));
             
           // Refresh data when there's a change that affects this user

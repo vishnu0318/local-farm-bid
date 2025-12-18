@@ -65,14 +65,14 @@ const BrowseProducts = () => {
           if (user) {
             const { data: highestBidData, error: bidError } = await supabase
               .from('bids')
-              .select('bidder_id')
+              .select('buyer_id')
               .eq('product_id', product.id)
               .order('amount', { ascending: false })
               .limit(1)
               .single();
             
             if (!bidError && highestBidData) {
-              isUserHighestBidder = highestBidData.bidder_id === user.id;
+              isUserHighestBidder = highestBidData.buyer_id === user.id;
             }
           }
           

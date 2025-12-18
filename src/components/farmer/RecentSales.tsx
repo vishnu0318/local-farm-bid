@@ -9,18 +9,17 @@ import { toast } from 'sonner';
 
 interface RecentSale {
   id: string;
-  amount: number;
-  payment_method: string;
+  total_amount: number;
   payment_status: string;
-  payment_date: string;
-  transaction_id: string;
-  product: {
+  created_at: string;
+  payment_id: string | null;
+  quantity: number;
+  product?: {
     name: string;
-    quantity: number;
     unit: string;
   };
-  buyer: {
-    name: string;
+  buyer?: {
+    name: string | null;
     email: string;
   };
 }
@@ -35,69 +34,26 @@ const RecentSales = () => {
     
     try {
       setLoading(true);
-      console.log('Fetching recent sales for farmer:', user.id);
       
-      // Get farmer's products
-      const { data: products, error: productsError } = await supabase
-        .from('products')
-        .select('id')
-        .eq('farmer_id', user.id);
-
-      if (productsError) {
-        console.error('Error fetching products:', productsError);
-        return;
-      }
-
-      if (!products || products.length === 0) {
-        console.log('No products found for farmer');
-        setRecentSales([]);
-        return;
-      }
-
-      const productIds = products.map(p => p.id);
-      console.log('Found product IDs:', productIds);
-
-      // Get orders for farmer's products
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
+      // Get sales for farmer's products
+      const { data: sales, error: salesError } = await supabase
+        .from('sales')
         .select(`
           *,
-          product:product_id(
-            name,
-            quantity,
-            unit
-          )
+          product:products(name, unit),
+          buyer:profiles!sales_buyer_id_fkey(name, email)
         `)
-        .in('product_id', productIds)
+        .eq('farmer_id', user.id)
         .eq('payment_status', 'completed')
-        .order('payment_date', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(5);
 
-      if (ordersError) {
-        console.error('Error fetching orders:', ordersError);
+      if (salesError) {
+        console.error('Error fetching sales:', salesError);
         return;
       }
 
-      console.log('Found orders:', orders);
-
-      // Get buyer details for each order
-      const salesWithBuyers = await Promise.all(
-        (orders || []).map(async (order) => {
-          const { data: buyer } = await supabase
-            .from('profiles')
-            .select('name, email')
-            .eq('id', order.buyer_id)
-            .single();
-
-          return {
-            ...order,
-            buyer: buyer || { name: 'Unknown Buyer', email: '' }
-          };
-        })
-      );
-
-      console.log('Sales with buyers:', salesWithBuyers);
-      setRecentSales(salesWithBuyers);
+      setRecentSales(sales || []);
     } catch (error) {
       console.error('Error fetching recent sales:', error);
       toast.error('Failed to load recent sales');
@@ -109,74 +65,27 @@ const RecentSales = () => {
   useEffect(() => {
     fetchRecentSales();
     
-    // Set up real-time listener for new orders
-    let channel: any = null;
-    
-    const setupRealtimeListener = async () => {
-      if (!user?.id) return;
-      
-      try {
-        const { data: products } = await supabase
-          .from('products')
-          .select('id')
-          .eq('farmer_id', user.id);
-          
-        if (!products || products.length === 0) return;
-        
-        const productIds = products.map(p => p.id);
-        
-        channel = supabase
-          .channel('recent-sales-realtime')
-          .on('postgres_changes', 
-            { 
-              event: '*', 
-              schema: 'public', 
-              table: 'orders'
-            }, 
-            async (payload) => {
-              console.log('Order change detected in RecentSales:', payload);
-              const orderData = payload.new as any;
-              
-              if (orderData && 
-                  productIds.includes(orderData.product_id) && 
-                  orderData.payment_status === 'completed') {
-                console.log('Refreshing recent sales due to new payment');
-                await fetchRecentSales();
-              }
-            }
-          )
-          .subscribe((status) => {
-            console.log('RecentSales real-time subscription status:', status);
-          });
-      } catch (error) {
-        console.error('Error setting up real-time listener for recent sales:', error);
-      }
-    };
-    
-    setupRealtimeListener();
+    // Set up real-time listener for new sales
+    const channel = supabase
+      .channel('recent-sales-realtime')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'sales',
+          filter: `farmer_id=eq.${user?.id}`
+        }, 
+        async (payload) => {
+          console.log('Sale change detected:', payload);
+          await fetchRecentSales();
+        }
+      )
+      .subscribe();
 
     return () => {
-      if (channel) {
-        console.log('Cleaning up RecentSales real-time channel');
-        supabase.removeChannel(channel);
-      }
+      supabase.removeChannel(channel);
     };
   }, [user?.id]);
-
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case 'card':
-        return '💳';
-      case 'upi':
-        return '📱';
-      case 'razorpay':
-        return '💳';
-      case 'cod':
-        return '💵';
-      default:
-        return '💰';
-    }
-  };
 
   if (loading) {
     return (
@@ -216,16 +125,16 @@ const RecentSales = () => {
                     <h4 className="font-semibold text-lg">{sale.product?.name}</h4>
                     <div className="flex items-center text-sm text-gray-600 mt-1">
                       <User className="h-4 w-4 mr-1" />
-                      <span>{sale.buyer?.name}</span>
+                      <span>{sale.buyer?.name || 'Unknown Buyer'}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex items-center font-bold text-lg text-green-600">
                       <IndianRupee className="h-5 w-5 mr-1" />
-                      <span>{sale.amount}</span>
+                      <span>{sale.total_amount}</span>
                     </div>
                     <Badge variant="secondary" className="mt-1">
-                      {getPaymentMethodIcon(sale.payment_method)} {sale.payment_method.toUpperCase()}
+                      {sale.payment_status}
                     </Badge>
                   </div>
                 </div>
@@ -233,17 +142,19 @@ const RecentSales = () => {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-600">Quantity:</span>
-                    <span className="ml-2 font-medium">{sale.product?.quantity} {sale.product?.unit}</span>
+                    <span className="ml-2 font-medium">{sale.quantity} {sale.product?.unit}</span>
                   </div>
                   <div>
                     <span className="text-gray-600">Date:</span>
-                    <span className="ml-2 font-medium">{new Date(sale.payment_date).toLocaleDateString()}</span>
+                    <span className="ml-2 font-medium">{new Date(sale.created_at).toLocaleDateString()}</span>
                   </div>
                 </div>
                 
-                <div className="mt-2 text-xs text-gray-500">
-                  Transaction ID: {sale.transaction_id}
-                </div>
+                {sale.payment_id && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Payment ID: {sale.payment_id}
+                  </div>
+                )}
               </div>
             ))}
           </div>
