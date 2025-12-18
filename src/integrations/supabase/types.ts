@@ -16,7 +16,9 @@ export type Database = {
     Tables: {
       bids: {
         Row: {
+          amount: number | null
           bid_price: number
+          bidder_name: string | null
           buyer_id: string
           counter_price: number | null
           created_at: string
@@ -30,7 +32,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amount?: number | null
           bid_price: number
+          bidder_name?: string | null
           buyer_id: string
           counter_price?: number | null
           created_at?: string
@@ -44,7 +48,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amount?: number | null
           bid_price?: number
+          bidder_name?: string | null
           buyer_id?: string
           counter_price?: number | null
           created_at?: string
@@ -124,54 +130,63 @@ export type Database = {
       }
       products: {
         Row: {
+          available: boolean | null
+          bid_end: string | null
+          bid_start: string | null
           category: string
           created_at: string
           description: string | null
           farmer_id: string
           harvest_date: string | null
           id: string
+          image_url: string | null
           images: string[] | null
-          is_available: boolean | null
           location: string | null
           minimum_order: number | null
           name: string
-          price_per_unit: number
+          price: number | null
           product_type: string
           quantity: number
           unit: string
           updated_at: string
         }
         Insert: {
+          available?: boolean | null
+          bid_end?: string | null
+          bid_start?: string | null
           category: string
           created_at?: string
           description?: string | null
           farmer_id: string
           harvest_date?: string | null
           id?: string
+          image_url?: string | null
           images?: string[] | null
-          is_available?: boolean | null
           location?: string | null
           minimum_order?: number | null
           name: string
-          price_per_unit: number
+          price?: number | null
           product_type: string
           quantity: number
           unit?: string
           updated_at?: string
         }
         Update: {
+          available?: boolean | null
+          bid_end?: string | null
+          bid_start?: string | null
           category?: string
           created_at?: string
           description?: string | null
           farmer_id?: string
           harvest_date?: string | null
           id?: string
+          image_url?: string | null
           images?: string[] | null
-          is_available?: boolean | null
           location?: string | null
           minimum_order?: number | null
           name?: string
-          price_per_unit?: number
+          price?: number | null
           product_type?: string
           quantity?: number
           unit?: string
@@ -192,12 +207,16 @@ export type Database = {
           address: string | null
           avatar_url: string | null
           city: string | null
+          company_name: string | null
           created_at: string
           email: string
           full_name: string | null
           id: string
+          land_size: string | null
+          name: string | null
           phone: string | null
           pincode: string | null
+          preferred_categories: string[] | null
           role: Database["public"]["Enums"]["user_role"]
           state: string | null
           updated_at: string
@@ -206,12 +225,16 @@ export type Database = {
           address?: string | null
           avatar_url?: string | null
           city?: string | null
+          company_name?: string | null
           created_at?: string
           email: string
           full_name?: string | null
           id: string
+          land_size?: string | null
+          name?: string | null
           phone?: string | null
           pincode?: string | null
+          preferred_categories?: string[] | null
           role?: Database["public"]["Enums"]["user_role"]
           state?: string | null
           updated_at?: string
@@ -220,12 +243,16 @@ export type Database = {
           address?: string | null
           avatar_url?: string | null
           city?: string | null
+          company_name?: string | null
           created_at?: string
           email?: string
           full_name?: string | null
           id?: string
+          land_size?: string | null
+          name?: string | null
           phone?: string | null
           pincode?: string | null
+          preferred_categories?: string[] | null
           role?: Database["public"]["Enums"]["user_role"]
           state?: string | null
           updated_at?: string
