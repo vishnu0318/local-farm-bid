@@ -67,9 +67,9 @@ const BrowseProducts = () => {
               .from('bids')
               .select('buyer_id')
               .eq('product_id', product.id)
-              .order('amount', { ascending: false })
+              .order('bid_price', { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle();
             
             if (!bidError && highestBidData) {
               isUserHighestBidder = highestBidData.buyer_id === user.id;
