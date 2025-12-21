@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { mockProducts } from "./mockData";
 
@@ -26,7 +25,7 @@ export interface Product {
 export interface Bid {
   id: string;
   product_id: string;
-  bidder_id: string;
+  buyer_id: string;
   bidder_name: string;
   amount: number;
   created_at: string;
@@ -58,17 +57,17 @@ export const getProductById = async (productId: string): Promise<Product | null>
     try {
       const { data: bidData } = await supabase
         .from('bids')
-        .select('amount, bidder_name')
+        .select('bid_price, bidder_name')
         .eq('product_id', productId)
-        .order('amount', { ascending: false })
+        .order('bid_price', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
         
       if (bidData) {
         // Add highest bid information to the product
         return {
           ...data as Product,
-          currentBid: bidData.amount,
+          currentBid: bidData.bid_price,
           highestBidderName: bidData.bidder_name
         };
       }
@@ -95,16 +94,24 @@ export const getProductBids = async (productId: string): Promise<Bid[]> => {
   try {
     const { data, error } = await supabase
       .from('bids')
-      .select('*')
+      .select('id, product_id, buyer_id, bidder_name, bid_price, created_at')
       .eq('product_id', productId)
-      .order('amount', { ascending: false });
+      .order('bid_price', { ascending: false });
     
     if (error) {
       console.error('Error fetching bids:', error);
       return [];
     }
     
-    return data as Bid[];
+    // Map to expected Bid interface
+    return (data || []).map(bid => ({
+      id: bid.id,
+      product_id: bid.product_id,
+      buyer_id: bid.buyer_id,
+      bidder_name: bid.bidder_name || 'Unknown',
+      amount: bid.bid_price,
+      created_at: bid.created_at
+    }));
   } catch (error) {
     console.error('Error fetching bids:', error);
     return [];
@@ -115,7 +122,7 @@ export const addProduct = async (product: Omit<Product, 'id' | 'created_at' | 'u
   try {
     const { data, error } = await supabase
       .from('products')
-      .insert(product)
+      .insert([product as any])
       .select();
     
     if (error) {
@@ -164,7 +171,7 @@ export const deleteProduct = async (id: string): Promise<{ success: boolean; err
     }
     
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting product:', error);
     return { success: false, error: error.message || "An unexpected error occurred" };
   }
@@ -194,13 +201,19 @@ export const placeBid = async(
       };
     }
 
-    // Insert the bid
+    // Get farmer_id from product
+    const farmerId = product.farmer_id;
+
+    // Insert the bid with correct column names
     const { data, error } = await supabase.from("bids").insert([
       {
         product_id: product.id,
-        bidder_id: user.id,
+        buyer_id: user.id,
+        farmer_id: farmerId,
         bidder_name: user.name,
-        amount: bidAmount,
+        bid_price: bidAmount,
+        quantity: 1,
+        total_amount: bidAmount
       },
     ]).select();
 
@@ -214,9 +227,16 @@ export const placeBid = async(
     // Return success with the created bid
     return { 
       success: true, 
-      bid: data[0] as Bid
+      bid: {
+        id: data[0].id,
+        product_id: data[0].product_id,
+        buyer_id: data[0].buyer_id,
+        bidder_name: data[0].bidder_name,
+        amount: data[0].bid_price,
+        created_at: data[0].created_at
+      }
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error placing bid:', error);
     return { 
       success: false, 

@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { Bid, Product } from "@/types/marketplace";
 import { toast } from "sonner";
@@ -37,20 +36,20 @@ export const placeBid = async (
     // Get current highest bid
     const { data: highestBidData, error: bidError } = await supabase
       .from('bids')
-      .select('amount')
+      .select('bid_price')
       .eq('product_id', productId)
-      .order('amount', { ascending: false })
+      .order('bid_price', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
     
     // Determine minimum bid based on highest bid or product price
     let minBid = 0;
     
-    if (bidError) {
+    if (!highestBidData) {
       console.log('No existing bids found for this product');
-      minBid = product.price + 1;
+      minBid = (product.price || 0) + 1;
     } else {
-      minBid = highestBidData.amount + 1;
+      minBid = highestBidData.bid_price + 1;
     }
     
     // Check if bid is high enough
@@ -61,14 +60,17 @@ export const placeBid = async (
       };
     }
     
-    // Insert bid
+    // Insert bid - using correct column names from bids table
     const { data, error } = await supabase
       .from('bids')
       .insert({
         product_id: productId,
-        bidder_id: bidderId,
+        buyer_id: bidderId,
+        farmer_id: product.farmer_id,
         bidder_name: bidderName,
-        amount
+        bid_price: amount,
+        quantity: 1,
+        total_amount: amount
       })
       .select();
     
@@ -92,16 +94,24 @@ export const getProductBids = async (productId: string): Promise<Bid[]> => {
   try {
     const { data, error } = await supabase
       .from('bids')
-      .select('*')
+      .select('id, product_id, buyer_id, bidder_name, bid_price, created_at')
       .eq('product_id', productId)
-      .order('amount', { ascending: false });
+      .order('bid_price', { ascending: false });
     
     if (error) {
       console.error('Error fetching bids:', error);
       return [];
     }
     
-    return data as Bid[];
+    // Map to expected Bid interface
+    return (data || []).map(bid => ({
+      id: bid.id,
+      product_id: bid.product_id,
+      buyer_id: bid.buyer_id,
+      bidder_name: bid.bidder_name || 'Unknown',
+      amount: bid.bid_price,
+      created_at: bid.created_at
+    })) as Bid[];
   } catch (error) {
     console.error('Error fetching bids:', error);
     return [];
@@ -112,11 +122,8 @@ export const getUserBids = async (userId: string): Promise<Bid[]> => {
   try {
     const { data, error } = await supabase
       .from('bids')
-      .select(`
-        *,
-        product:product_id (*)
-      `)
-      .eq('bidder_id', userId)
+      .select('id, product_id, buyer_id, bidder_name, bid_price, created_at')
+      .eq('buyer_id', userId)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -124,13 +131,28 @@ export const getUserBids = async (userId: string): Promise<Bid[]> => {
       return [];
     }
     
-    // Process the bids to match our expected format
-    const processedBids = data.map((bid: any) => ({
-      ...bid,
-      product: bid.product
-    }));
+    // Fetch product details for each bid
+    const bidsWithProducts = await Promise.all(
+      (data || []).map(async (bid) => {
+        const { data: product } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', bid.product_id)
+          .single();
+        
+        return {
+          id: bid.id,
+          product_id: bid.product_id,
+          buyer_id: bid.buyer_id,
+          bidder_name: bid.bidder_name || 'Unknown',
+          amount: bid.bid_price,
+          created_at: bid.created_at,
+          product: product || undefined
+        };
+      })
+    );
     
-    return processedBids as Bid[];
+    return bidsWithProducts as Bid[];
   } catch (error) {
     console.error('Error fetching user bids:', error);
     return [];
@@ -141,34 +163,29 @@ export const getHighestBid = async (productId: string): Promise<number> => {
   try {
     const { data, error } = await supabase
       .from('bids')
-      .select('amount')
+      .select('bid_price')
       .eq('product_id', productId)
-      .order('amount', { ascending: false })
+      .order('bid_price', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
     
-    if (error) {
-      if (error.code === 'PGRST116') { // Code for "no rows returned"
-        // No bids yet, get the product base price
-        const { data: product, error: productError } = await supabase
-          .from('products')
-          .select('price')
-          .eq('id', productId)
-          .single();
-          
-        if (productError) {
-          console.error('Error fetching product base price:', productError);
-          return 0;
-        }
+    if (error || !data) {
+      // No bids yet, get the product base price
+      const { data: product, error: productError } = await supabase
+        .from('products')
+        .select('price')
+        .eq('id', productId)
+        .single();
         
-        return product.price;
+      if (productError) {
+        console.error('Error fetching product base price:', productError);
+        return 0;
       }
       
-      console.error('Error fetching highest bid:', error);
-      return 0;
+      return product.price || 0;
     }
     
-    return data.amount;
+    return data.bid_price;
   } catch (error) {
     console.error('Error fetching highest bid:', error);
     return 0;
@@ -198,26 +215,7 @@ export const subscribeToBidChanges = (
 
 // Get all bids for a user with product details
 export const getUserBidsWithProducts = async (userId: string): Promise<Bid[]> => {
-  try {
-    const { data, error } = await supabase
-      .from('bids')
-      .select(`
-        *,
-        product:product_id (*)
-      `)
-      .eq('bidder_id', userId)
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Error fetching user bids:', error);
-      return [];
-    }
-    
-    return data as Bid[];
-  } catch (error) {
-    console.error('Error fetching user bids with products:', error);
-    return [];
-  }
+  return getUserBids(userId);
 };
 
 // Count total bids for a product
@@ -245,12 +243,7 @@ export const getBidHistoryForFarmer = async (productId: string): Promise<Bid[]> 
   try {
     const { data, error } = await supabase
       .from('bids')
-      .select(`
-        id,
-        bidder_name,
-        amount,
-        created_at
-      `)
+      .select('id, bidder_name, bid_price, created_at, product_id, buyer_id')
       .eq('product_id', productId)
       .order('created_at', { ascending: false });
     
@@ -259,7 +252,14 @@ export const getBidHistoryForFarmer = async (productId: string): Promise<Bid[]> 
       return [];
     }
     
-    return data as Bid[];
+    return (data || []).map(bid => ({
+      id: bid.id,
+      product_id: bid.product_id,
+      buyer_id: bid.buyer_id,
+      bidder_name: bid.bidder_name || 'Unknown',
+      amount: bid.bid_price,
+      created_at: bid.created_at
+    })) as Bid[];
   } catch (error) {
     console.error('Error fetching bid history:', error);
     return [];

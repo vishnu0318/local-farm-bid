@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,19 +14,17 @@ import { generateInvoice } from '@/services/paymentService';
 
 interface Sale {
   id: string;
-  amount: number;
-  payment_method: string;
+  total_amount: number;
   payment_status: string;
-  payment_date: string;
-  transaction_id: string;
-  delivery_address: any;
+  payment_id: string | null;
+  delivery_address: string | null;
   created_at: string;
   product: {
     name: string;
     quantity: number;
     unit: string;
     description: string;
-  };
+  } | null;
   buyer: {
     name: string;
     email: string;
@@ -41,7 +38,6 @@ const SalesHistory = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [invoiceLoading, setInvoiceLoading] = useState<string | null>(null);
 
@@ -50,61 +46,65 @@ const SalesHistory = () => {
       setLoading(true);
       console.log('Fetching sales history for farmer:', user?.id);
       
-      // Get farmer's products
-      const { data: products, error: productsError } = await supabase
-        .from('products')
-        .select('id')
-        .eq('farmer_id', user?.id);
+      // Get sales for farmer
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select(`
+          id,
+          total_amount,
+          payment_status,
+          payment_id,
+          delivery_address,
+          created_at,
+          product_id,
+          buyer_id
+        `)
+        .eq('farmer_id', user?.id)
+        .order('created_at', { ascending: false });
 
-      if (productsError) throw productsError;
+      if (salesError) throw salesError;
 
-      if (!products || products.length === 0) {
-        console.log('No products found for farmer');
+      if (!salesData || salesData.length === 0) {
+        console.log('No sales found for farmer');
         setSales([]);
         setFilteredSales([]);
         return;
       }
 
-      const productIds = products.map(p => p.id);
-      console.log('Found product IDs:', productIds);
+      console.log('Found sales:', salesData);
 
-      // Get all orders for farmer's products
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          product:product_id(
-            name,
-            quantity,
-            unit,
-            description
-          )
-        `)
-        .in('product_id', productIds)
-        .order('created_at', { ascending: false });
+      // Get product and buyer details for each sale
+      const salesWithDetails = await Promise.all(
+        salesData.map(async (sale) => {
+          // Fetch product details
+          const { data: product } = await supabase
+            .from('products')
+            .select('name, quantity, unit, description')
+            .eq('id', sale.product_id)
+            .single();
 
-      if (ordersError) throw ordersError;
-
-      console.log('Found orders:', orders);
-
-      // Get buyer details for each order
-      const salesWithBuyers = await Promise.all(
-        (orders || []).map(async (order) => {
+          // Fetch buyer details
           const { data: buyer } = await supabase
             .from('profiles')
             .select('name, email')
-            .eq('id', order.buyer_id)
+            .eq('id', sale.buyer_id)
             .single();
 
           return {
-            ...order,
+            id: sale.id,
+            total_amount: sale.total_amount,
+            payment_status: sale.payment_status,
+            payment_id: sale.payment_id,
+            delivery_address: sale.delivery_address,
+            created_at: sale.created_at,
+            product: product || null,
             buyer: buyer || { name: 'Unknown Buyer', email: '' }
-          };
+          } as Sale;
         })
       );
 
-      console.log('Sales with buyers:', salesWithBuyers);
-      setSales(salesWithBuyers);
+      console.log('Sales with details:', salesWithDetails);
+      setSales(salesWithDetails);
     } catch (error) {
       console.error('Error fetching sales history:', error);
       toast.error('Failed to load sales history');
@@ -117,18 +117,18 @@ const SalesHistory = () => {
     if (!user) return;
     fetchSalesHistory();
 
-    // Set up real-time listener for orders
+    // Set up real-time listener for sales
     const channel = supabase
       .channel('sales-history-updates')
       .on('postgres_changes', 
         { 
           event: '*', 
           schema: 'public', 
-          table: 'orders'
+          table: 'sales'
         }, 
         async (payload) => {
-          console.log('Order change detected in SalesHistory:', payload);
-          // Refresh sales history when any order changes
+          console.log('Sales change detected in SalesHistory:', payload);
+          // Refresh sales history when any sale changes
           await fetchSalesHistory();
         }
       )
@@ -141,7 +141,7 @@ const SalesHistory = () => {
 
   useEffect(() => {
     filterSales();
-  }, [sales, searchTerm, statusFilter, paymentMethodFilter]);
+  }, [sales, searchTerm, statusFilter]);
 
   const filterSales = () => {
     let filtered = [...sales];
@@ -151,7 +151,7 @@ const SalesHistory = () => {
       filtered = filtered.filter(sale =>
         sale.product?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         sale.buyer?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sale.transaction_id?.toLowerCase().includes(searchTerm.toLowerCase())
+        sale.payment_id?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -160,18 +160,13 @@ const SalesHistory = () => {
       filtered = filtered.filter(sale => sale.payment_status === statusFilter);
     }
 
-    // Payment method filter
-    if (paymentMethodFilter !== 'all') {
-      filtered = filtered.filter(sale => sale.payment_method === paymentMethodFilter);
-    }
-
     setFilteredSales(filtered);
   };
 
-  const handleViewInvoice = async (orderId: string) => {
+  const handleViewInvoice = async (saleId: string) => {
     try {
-      setInvoiceLoading(orderId);
-      const { success, data, error } = await generateInvoice(orderId);
+      setInvoiceLoading(saleId);
+      const { success, data, error } = await generateInvoice(saleId);
       
       if (success && data) {
         setSelectedInvoice(data);
@@ -199,24 +194,9 @@ const SalesHistory = () => {
     }
   };
 
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case 'card':
-        return '💳';
-      case 'upi':
-        return '📱';
-      case 'razorpay':
-        return '💳';
-      case 'cod':
-        return '💵';
-      default:
-        return '💰';
-    }
-  };
-
   const totalEarnings = filteredSales
     .filter(sale => sale.payment_status === 'completed')
-    .reduce((sum, sale) => sum + sale.amount, 0);
+    .reduce((sum, sale) => sum + sale.total_amount, 0);
 
   if (loading) {
     return (
@@ -245,7 +225,7 @@ const SalesHistory = () => {
       {/* Filters */}
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input
@@ -264,18 +244,6 @@ const SalesHistory = () => {
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="failed">Failed</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={paymentMethodFilter} onValueChange={setPaymentMethodFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Payment Method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Methods</SelectItem>
-                <SelectItem value="card">Card</SelectItem>
-                <SelectItem value="upi">UPI</SelectItem>
-                <SelectItem value="razorpay">Razorpay</SelectItem>
-                <SelectItem value="cod">Cash on Delivery</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex items-center">
@@ -312,13 +280,13 @@ const SalesHistory = () => {
                       <span>{sale.buyer?.name}</span>
                       <span className="mx-2">•</span>
                       <Calendar className="h-4 w-4 mr-1" />
-                      <span>{new Date(sale.payment_date || sale.created_at).toLocaleDateString()}</span>
+                      <span>{new Date(sale.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex items-center text-2xl font-bold text-green-600 mb-2">
                       <IndianRupee className="h-6 w-6 mr-1" />
-                      <span>{sale.amount}</span>
+                      <span>{sale.total_amount}</span>
                     </div>
                     <Badge className={getStatusColor(sale.payment_status)}>
                       {sale.payment_status.charAt(0).toUpperCase() + sale.payment_status.slice(1)}
@@ -326,29 +294,21 @@ const SalesHistory = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <p className="text-sm text-gray-600">Quantity Sold</p>
                     <p className="font-semibold">{sale.product?.quantity} {sale.product?.unit}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Payment Method</p>
-                    <p className="font-semibold">
-                      {getPaymentMethodIcon(sale.payment_method)} {sale.payment_method.toUpperCase()}
-                    </p>
-                  </div>
-                  <div>
                     <p className="text-sm text-gray-600">Transaction ID</p>
-                    <p className="font-mono text-sm">{sale.transaction_id}</p>
+                    <p className="font-mono text-sm">{sale.payment_id || 'N/A'}</p>
                   </div>
                 </div>
 
                 {sale.delivery_address && (
                   <div className="mb-4">
                     <p className="text-sm text-gray-600">Delivery Address</p>
-                    <p className="text-sm">
-                      {sale.delivery_address.addressLine1}, {sale.delivery_address.city}, {sale.delivery_address.state} - {sale.delivery_address.postalCode}
-                    </p>
+                    <p className="text-sm">{sale.delivery_address}</p>
                   </div>
                 )}
 

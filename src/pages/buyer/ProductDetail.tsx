@@ -34,15 +34,15 @@ const ProductDetail = () => {
     if (!id || !user?.id) return;
     
     try {
-      const { data: userOrder, error } = await supabase
-        .from('orders')
-        .select('payment_status, amount')
+      const { data: userSale, error } = await supabase
+        .from('sales')
+        .select('payment_status, total_amount')
         .eq('product_id', id)
         .eq('buyer_id', user.id)
         .eq('payment_status', 'completed')
-        .single();
+        .maybeSingle();
         
-      if (!error && userOrder) {
+      if (!error && userSale) {
         setUserHasPaid(true);
         console.log('User has already paid for this product');
       }
@@ -69,7 +69,14 @@ const ProductDetail = () => {
         if (productError) throw productError;
         
         setProduct(productData);
-        setProductPaid(productData.paid || false);
+        // Check if product is paid based on sales table
+        const { data: salesData } = await supabase
+          .from('sales')
+          .select('payment_status')
+          .eq('product_id', id)
+          .eq('payment_status', 'completed')
+          .maybeSingle();
+        setProductPaid(!!salesData);
         
         // Fetch farmer details separately
         if (productData?.farmer_id) {
@@ -101,7 +108,7 @@ const ProductDetail = () => {
           const maxBid = productBids[0]; // Assuming bids are sorted by amount desc
           setHighestBid(maxBid.amount);
           
-          if (user && maxBid.bidder_id === user.id) {
+          if (user && maxBid.buyer_id === user.id) {
             setIsUserHighestBidder(true);
           }
         } else {
@@ -147,7 +154,7 @@ const ProductDetail = () => {
           const maxBid = refreshedBids[0]; // Assuming bids are sorted by amount desc
           setHighestBid(maxBid.amount);
           
-          if (user && maxBid.bidder_id === user.id) {
+          if (user && maxBid.buyer_id === user.id) {
             setIsUserHighestBidder(true);
           } else {
             setIsUserHighestBidder(false);
@@ -155,30 +162,29 @@ const ProductDetail = () => {
         }
       });
 
-      // Also listen to order updates to refresh payment status
-      const orderChannel = supabase
-        .channel('product-orders')
+      // Also listen to sales updates to refresh payment status
+      const salesChannel = supabase
+        .channel('product-sales')
         .on('postgres_changes', 
           { 
             event: '*', 
             schema: 'public', 
-            table: 'orders',
+            table: 'sales',
             filter: `product_id=eq.${id}`
           }, 
           async (payload) => {
-            console.log('Order update received:', payload);
+            console.log('Sales update received:', payload);
             await checkUserPaymentStatus();
             
             // Also refresh product data to check if it's been marked as paid
-            const { data: updatedProduct } = await supabase
-              .from('products')
-              .select('paid')
-              .eq('id', id)
-              .single();
+            const { data: salesData } = await supabase
+              .from('sales')
+              .select('payment_status')
+              .eq('product_id', id)
+              .eq('payment_status', 'completed')
+              .maybeSingle();
               
-            if (updatedProduct) {
-              setProductPaid(updatedProduct.paid || false);
-            }
+            setProductPaid(!!salesData);
           }
         )
         .subscribe();
@@ -204,7 +210,7 @@ const ProductDetail = () => {
         const maxBid = refreshedBids[0]; // Assuming bids are sorted by amount desc
         setHighestBid(maxBid.amount);
         
-        if (user && maxBid.bidder_id === user.id) {
+        if (user && maxBid.buyer_id === user.id) {
           setIsUserHighestBidder(true);
           toast.success('You are now the highest bidder!');
         } else {
@@ -395,7 +401,7 @@ const ProductDetail = () => {
                         <div key={bid.id} className="flex justify-between items-center">
                           <div className="flex items-center">
                             <span className={`font-medium ${index === 0 ? 'text-green-600' : ''}`}>
-                              {bid.bidder_id === user?.id ? 'You' : bid.bidder_name}
+                              {bid.buyer_id === user?.id ? 'You' : bid.bidder_name}
                             </span>
                             {index === 0 && <Badge className="ml-2 bg-green-600">Highest</Badge>}
                           </div>
@@ -447,65 +453,127 @@ const ProductDetail = () => {
                     </p>
                   </div>
                 </div>
+
+                <Separator />
                 
-                <Button 
-                  className="w-full" 
-                  onClick={() => window.location.href = '/buyer/order-history'}
-                >
-                  View Order Details
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Farmer Details</p>
+                  {farmer && (
+                    <div className="space-y-1">
+                      <p className="font-medium">{farmer.name || "Unknown"}</p>
+                      {farmer.phone && <p className="text-sm">{farmer.phone}</p>}
+                      {farmer.address && (
+                        <p className="text-sm flex items-center">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {farmer.address}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                <Button variant="outline" className="w-full" asChild>
+                  <Link to="/buyer/order-history">View Order History</Link>
                 </Button>
               </CardContent>
             </Card>
           )}
-          
-          {/* If user won the auction but hasn't paid yet, show payment button */}
-          {auctionEnded && isUserHighestBidder && !userHasPaid && (
-            <Card className="p-6 border-2 border-green-500 mb-6">
+
+          {/* If user won the auction but hasn't paid yet */}
+          {auctionEnded && isUserHighestBidder && !userHasPaid && !productPaid && (
+            <Card className="p-6 border-2 border-yellow-500 mb-6">
               <CardContent className="p-0 space-y-4">
                 <div className="text-center">
-                  <h3 className="text-xl font-semibold text-green-600">Congratulations!</h3>
-                  <p className="text-gray-600">You've won this auction.</p>
+                  <CheckCircle className="h-16 w-16 mx-auto text-yellow-500 mb-4" />
+                  <h3 className="text-xl font-semibold text-yellow-600">Congratulations!</h3>
+                  <p className="text-gray-600">You won this auction with the highest bid!</p>
+                  <Badge className="mt-2 bg-yellow-500">Winner</Badge>
                 </div>
                 
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm text-gray-500">Your Winning Bid</p>
-                    <p className="text-xl font-bold flex items-center text-green-600">
+                    <p className="text-sm text-gray-500">Winning Bid</p>
+                    <p className="text-xl font-bold flex items-center text-yellow-600">
                       <IndianRupee className="h-4 w-4 mr-0.5" />
                       {highestBid}
                     </p>
                   </div>
                 </div>
                 
-                <Link to={`/buyer/payment-details?product=${product.id}`} className="w-full">
-                  <Button className="w-full bg-green-600 hover:bg-green-700">Complete Purchase</Button>
-                </Link>
+                <Button className="w-full" asChild>
+                  <Link to={`/buyer/payment/${id}`}>Proceed to Payment</Link>
+                </Button>
               </CardContent>
             </Card>
           )}
-          
-          {/* Regular bid form for ongoing auctions or if user didn't win */}
-          {(!auctionEnded || !isUserHighestBidder) && (
+
+          {/* If auction ended but user didn't win */}
+          {auctionEnded && !isUserHighestBidder && bids.length > 0 && (
+            <Card className="p-6 mb-6">
+              <CardContent className="p-0 space-y-4">
+                <div className="text-center">
+                  <h3 className="text-xl font-semibold text-gray-600">Auction Ended</h3>
+                  <p className="text-gray-500 mt-2">This auction has ended. You did not win this time.</p>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500">Winning Bid</p>
+                    <p className="text-xl font-bold flex items-center">
+                      <IndianRupee className="h-4 w-4 mr-0.5" />
+                      {highestBid}
+                    </p>
+                  </div>
+                </div>
+                
+                <Button variant="outline" className="w-full" asChild>
+                  <Link to="/buyer/browse">Browse More Products</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* If auction is ongoing and user can bid */}
+          {!auctionEnded && hasBiddingStarted() && user && (
             <BidForm 
               product={product} 
+              currentHighestBid={highestBid} 
               onBidSuccess={handleBidSuccess} 
-              currentHighestBid={highestBid}
-              isWinner={auctionEnded && isUserHighestBidder}
             />
           )}
-          
-          {/* Show similar products */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Similar Products</CardTitle>
-              <CardDescription>You might also be interested in</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-center py-4 text-gray-500">
-                No similar products found
-              </p>
-            </CardContent>
-          </Card>
+
+          {/* If auction hasn't started yet */}
+          {!auctionEnded && !hasBiddingStarted() && product.bid_start && (
+            <Card className="p-6 mb-6">
+              <CardContent className="p-0 space-y-4">
+                <div className="text-center">
+                  <Timer className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                  <h3 className="text-xl font-semibold">Auction Starting Soon</h3>
+                  <p className="text-gray-500 mt-2">
+                    Bidding opens {formatDistance(new Date(product.bid_start), new Date(), { addSuffix: true })}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* If user is not logged in */}
+          {!user && (
+            <Card className="p-6 mb-6">
+              <CardContent className="p-0 space-y-4">
+                <div className="text-center">
+                  <h3 className="text-lg font-semibold">Login to Bid</h3>
+                  <p className="text-gray-500 mt-2">
+                    Please login or create an account to place bids.
+                  </p>
+                </div>
+                
+                <Button className="w-full" asChild>
+                  <Link to="/login">Login to Bid</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
