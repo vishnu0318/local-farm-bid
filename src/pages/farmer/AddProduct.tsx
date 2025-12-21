@@ -30,6 +30,7 @@ const AddProduct = () => {
   const [formData, setFormData] = useState({
     name: '',
     category: '',
+    productType: '',
     quantity: '',
     unit: 'kg',
     price: '',
@@ -57,6 +58,7 @@ const AddProduct = () => {
       setFormData({
         name: editData.name || '',
         category: editData.category || '',
+        productType: editData.product_type || '',
         quantity: editData.quantity?.toString() || '',
         unit: editData.unit || 'kg',
         price: editData.price?.toString() || '',
@@ -145,6 +147,7 @@ const AddProduct = () => {
     const productData = {
       name: formData.name,
       category: formData.category,
+      product_type: formData.productType || formData.category, // Use productType or fallback to category
       quantity: Number(formData.quantity),
       unit: formData.unit,
       price: Number(formData.price),
@@ -260,6 +263,33 @@ const AddProduct = () => {
                         {category.label}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Product Type */}
+              <div className="space-y-3 group">
+                <Label htmlFor="productType" className="text-sm font-semibold text-gray-700 flex items-center">
+                  Product Type
+                  <div className="w-2 h-2 bg-primary rounded-full ml-2 group-focus-within:animate-pulse"></div>
+                </Label>
+                <Select 
+                  value={formData.productType} 
+                  onValueChange={(value) => handleSelectChange('productType', value)}
+                >
+                  <SelectTrigger id="productType" className="h-12 bg-white/80 backdrop-blur-sm border-white/30 focus:border-primary/50 rounded-xl">
+                    <SelectValue placeholder="Select product type" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white/95 backdrop-blur-xl border-white/30 rounded-xl shadow-2xl">
+                    <SelectItem value="vegetables" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Vegetables</SelectItem>
+                    <SelectItem value="fruits" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Fruits</SelectItem>
+                    <SelectItem value="grains" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Grains</SelectItem>
+                    <SelectItem value="dairy" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Dairy Products</SelectItem>
+                    <SelectItem value="flowers" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Flowers</SelectItem>
+                    <SelectItem value="spices" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Spices & Herbs</SelectItem>
+                    <SelectItem value="honey" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Honey & Bee Products</SelectItem>
+                    <SelectItem value="eggs" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Eggs & Poultry</SelectItem>
+                    <SelectItem value="organic" className="hover:bg-primary/10 rounded-lg transition-colors duration-200">Organic Products</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
