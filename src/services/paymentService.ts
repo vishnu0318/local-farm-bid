@@ -46,7 +46,7 @@ export const createPaymentIntent = async (
 };
 
 /**
- * Records a completed payment in the database by updating the product
+ * Records a completed payment in the database using the sales table
  */
 export const recordPayment = async (
   productId: string,
@@ -67,14 +67,18 @@ export const recordPayment = async (
     // Get product details for the receipt
     const { data: productData, error: productError } = await supabase
       .from('products')
-      .select(`
-        *,
-        farmer:farmer_id(name, id)
-      `)
+      .select('*')
       .eq('id', productId)
       .single();
       
     if (productError) throw new Error(`Error fetching product: ${productError.message}`);
+    
+    // Get farmer details
+    const { data: farmerData } = await supabase
+      .from('profiles')
+      .select('name, id')
+      .eq('id', productData.farmer_id)
+      .single();
     
     // Get buyer details
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -82,37 +86,42 @@ export const recordPayment = async (
     
     if (!user) throw new Error("User not authenticated");
     
-    // Convert DeliveryAddress to a JSON object for storage
-    const addressObject = {
-      addressLine1: deliveryAddress.addressLine1,
-      addressLine2: deliveryAddress.addressLine2 || null,
-      city: deliveryAddress.city,
-      state: deliveryAddress.state || '',
-      postalCode: deliveryAddress.postalCode
-    };
+    // Get the winning bid to find bid_id
+    const { data: winningBid } = await supabase
+      .from('bids')
+      .select('id, quantity, bid_price')
+      .eq('product_id', productId)
+      .eq('buyer_id', user.id)
+      .order('bid_price', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    // Convert DeliveryAddress to a string for storage
+    const addressString = `${deliveryAddress.addressLine1}${deliveryAddress.addressLine2 ? ', ' + deliveryAddress.addressLine2 : ''}, ${deliveryAddress.city}, ${deliveryAddress.state || ''} - ${deliveryAddress.postalCode}`;
 
-    // Create payment record in orders table
-    const { data: orderData, error: orderError } = await supabase
-      .from('orders')
+    // Create payment record in sales table
+    const { data: saleData, error: saleError } = await supabase
+      .from('sales')
       .insert({
         product_id: productId,
         buyer_id: user.id,
-        amount,
-        payment_method: paymentMethod,
+        farmer_id: productData.farmer_id,
+        bid_id: winningBid?.id || productId, // Use bid_id if available
+        quantity: winningBid?.quantity || 1,
+        price_per_unit: winningBid?.bid_price || productData.price || amount,
+        total_amount: amount,
         payment_status: status,
-        delivery_address: addressObject,
-        transaction_id: transactionId,
-        payment_date: new Date().toISOString()
+        payment_id: transactionId,
+        delivery_address: addressString
       })
       .select();
         
-    if (orderError) throw new Error(`Error creating order record: ${orderError.message}`);
+    if (saleError) throw new Error(`Error creating sale record: ${saleError.message}`);
 
-    // Update the product status - mark as paid and unavailable
+    // Update the product status - mark as unavailable
     const { error: updateError } = await supabase
       .from('products')
       .update({
-        paid: true,
         available: false,
         updated_at: new Date().toISOString()
       })
@@ -123,15 +132,13 @@ export const recordPayment = async (
     // Create notification for the farmer about payment received
     if (productData.farmer_id) {
       try {
-        await supabase.from('notifications').insert([{
+        await supabase.from('notifications').insert({
           type: 'payment_received',
+          title: 'Payment Received',
           message: `Payment of ₹${amount} received for ${productData.name}`,
-          product_id: productId,
-          farmer_id: productData.farmer_id,
-          read: false,
-          bidder_name: user.user_metadata?.name || user.email,
-          bid_amount: amount
-        }]);
+          user_id: productData.farmer_id,
+          related_id: productId
+        });
       } catch (notificationError) {
         console.error("Error creating farmer notification:", notificationError);
       }
@@ -141,7 +148,10 @@ export const recordPayment = async (
       success: true, 
       data: {
         transactionId,
-        product: productData
+        product: {
+          ...productData,
+          farmer: farmerData
+        }
       } 
     };
   } catch (error: any) {
@@ -236,13 +246,13 @@ export const processPayment = async (
 };
 
 /**
- * Mark a product as paid in the database
+ * Mark a product as unavailable in the database
  */
 export const markProductAsPaid = async (productId: string) => {
   try {
     const { data, error } = await supabase
       .from('products')
-      .update({ paid: true })
+      .update({ available: false })
       .eq('id', productId);
     
     if (error) throw error;
@@ -254,74 +264,60 @@ export const markProductAsPaid = async (productId: string) => {
   }
 };
 
-export const generateInvoice = async (orderId: string) => {
+export const generateInvoice = async (saleId: string) => {
   try {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(`
-        *,
-        product:product_id(
-          name, 
-          quantity, 
-          unit, 
-          description,
-          farmer:farmer_id(name, id)
-        )
-      `)
-      .eq('id', orderId)
+    // Fetch sale data
+    const { data: saleData, error: saleError } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('id', saleId)
       .single();
       
-    if (error) throw error;
+    if (saleError) throw saleError;
     
-    if (!data) {
-      return { success: false, error: 'Order not found' };
+    if (!saleData) {
+      return { success: false, error: 'Sale not found' };
     }
     
-    // Try to get buyer details, handle case if relation doesn't exist
-    let buyerDetails = { name: 'Unknown Buyer', id: null };
+    // Fetch product details
+    const { data: productData } = await supabase
+      .from('products')
+      .select('name, quantity, unit, description')
+      .eq('id', saleData.product_id)
+      .single();
     
-    try {
-      const { data: userData } = await supabase
-        .from('profiles')
-        .select('name, id')
-        .eq('id', data.buyer_id)
-        .single();
-        
-      if (userData) {
-        buyerDetails = { 
-          name: userData.name || 'Unknown Buyer', 
-          id: userData.id 
-        };
-      }
-    } catch (error) {
-      console.log('Could not fetch buyer details, using default');
-      // Keep the default buyerDetails
-    }
+    // Fetch farmer details
+    const { data: farmerData } = await supabase
+      .from('profiles')
+      .select('name, id')
+      .eq('id', saleData.farmer_id)
+      .single();
     
-    // Try to get farmer details if not available in the join
-    let sellerDetails = { name: 'Unknown Seller', id: null };
-    if (data.product?.farmer) {
-      sellerDetails = data.product.farmer;
-    }
+    // Fetch buyer details
+    const { data: buyerData } = await supabase
+      .from('profiles')
+      .select('name, id')
+      .eq('id', saleData.buyer_id)
+      .single();
     
     // Format the invoice data
     const invoiceData = {
-      invoiceNumber: `INV-${orderId.slice(0, 8)}`,
-      orderId: orderId,
-      transactionId: data.transaction_id,
-      date: new Date(data.payment_date || data.created_at).toLocaleDateString(),
-      buyerDetails: buyerDetails,
-      sellerDetails: sellerDetails,
+      invoiceNumber: `INV-${saleId.slice(0, 8)}`,
+      orderId: saleId,
+      transactionId: saleData.payment_id,
+      date: new Date(saleData.created_at).toLocaleDateString(),
+      buyerDetails: buyerData || { name: 'Unknown Buyer', id: null },
+      sellerDetails: farmerData || { name: 'Unknown Seller', id: null },
       productDetails: {
-        name: data.product?.name || 'Unknown Product',
-        quantity: data.product?.quantity || 0,
-        unit: data.product?.unit || '',
-        description: data.product?.description || ''
+        name: productData?.name || 'Unknown Product',
+        quantity: saleData.quantity || 0,
+        unit: productData?.unit || '',
+        description: productData?.description || ''
       },
-      amount: data.amount,
-      paymentMethod: data.payment_method,
-      paymentStatus: 'completed', // Always show as completed for invoices
-      deliveryAddress: data.delivery_address
+      amount: saleData.total_amount,
+      paymentMethod: 'online',
+      paymentStatus: saleData.payment_status,
+      deliveryAddress: saleData.delivery_address
     };
     
     return { success: true, data: invoiceData };

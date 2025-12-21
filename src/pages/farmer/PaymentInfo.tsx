@@ -10,15 +10,14 @@ import { useAuth } from '@/context/AuthContext';
 import { generateInvoice } from '@/services/paymentService';
 import FarmerInvoice from '@/components/farmer/FarmerInvoice';
 
-interface Order {
+interface Sale {
   id: string;
   product_id: string;
-  amount: number;
-  payment_method: string;
+  total_amount: number;
   payment_status: string;
-  payment_date: string | null;
-  transaction_id: string | null;
+  payment_id: string | null;
   created_at: string | null;
+  delivery_address: string | null;
   product: {
     name: string;
     quantity: number;
@@ -29,13 +28,6 @@ interface Order {
     name: string;
     email: string;
   };
-  delivery_address?: {
-    addressLine1: string;
-    addressLine2?: string;
-    city: string;
-    state: string;
-    postalCode: string;
-  } | null;
 }
 
 const PaymentInfo = () => {
@@ -50,89 +42,69 @@ const PaymentInfo = () => {
     accountHolderName: '',
   });
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [invoiceLoading, setInvoiceLoading] = useState<string | null>(null);
 
-  const fetchOrders = async () => {
+  const fetchSales = async () => {
     if (!user?.id) return;
 
     try {
       setLoading(true);
       
-      // Get farmer's products
-      const { data: products, error: productsError } = await supabase
-        .from('products')
-        .select('id')
-        .eq('farmer_id', user.id);
-
-      if (productsError) throw productsError;
-
-      if (!products || products.length === 0) {
-        setOrders([]);
-        return;
-      }
-
-      const productIds = products.map(p => p.id);
-
-      // Get orders for farmer's products with better data - include ALL payment statuses
-      const { data: ordersData, error: ordersError } = await supabase
-        .from('orders')
+      // Get sales for farmer's products
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
         .select(`
-          *,
-          product:product_id(
-            name,
-            quantity,
-            unit,
-            description
-          )
+          id,
+          product_id,
+          total_amount,
+          payment_status,
+          payment_id,
+          created_at,
+          delivery_address,
+          buyer_id
         `)
-        .in('product_id', productIds)
+        .eq('farmer_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (ordersError) throw ordersError;
+      if (salesError) throw salesError;
 
-      // Get buyer details for each order and properly type the data
-      const ordersWithBuyers = await Promise.all(
-        (ordersData || []).map(async (order) => {
+      // Get product and buyer details for each sale
+      const salesWithDetails = await Promise.all(
+        (salesData || []).map(async (sale) => {
+          // Fetch product details
+          const { data: product } = await supabase
+            .from('products')
+            .select('name, quantity, unit, description')
+            .eq('id', sale.product_id)
+            .single();
+
+          // Fetch buyer details
           const { data: buyer } = await supabase
             .from('profiles')
             .select('name, email')
-            .eq('id', order.buyer_id)
+            .eq('id', sale.buyer_id)
             .single();
 
-          // Properly handle delivery_address type casting
-          let deliveryAddress = null;
-          if (order.delivery_address && typeof order.delivery_address === 'object') {
-            deliveryAddress = order.delivery_address as {
-              addressLine1: string;
-              addressLine2?: string;
-              city: string;
-              state: string;
-              postalCode: string;
-            };
-          }
-
           return {
-            id: order.id,
-            product_id: order.product_id,
-            amount: order.amount,
-            payment_method: order.payment_method,
-            payment_status: order.payment_status,
-            payment_date: order.payment_date,
-            transaction_id: order.transaction_id,
-            created_at: order.created_at,
-            product: order.product,
-            buyer: buyer || { name: 'Unknown Buyer', email: '' },
-            delivery_address: deliveryAddress
-          } as Order;
+            id: sale.id,
+            product_id: sale.product_id,
+            total_amount: sale.total_amount,
+            payment_status: sale.payment_status,
+            payment_id: sale.payment_id,
+            created_at: sale.created_at,
+            delivery_address: sale.delivery_address,
+            product: product || null,
+            buyer: buyer || { name: 'Unknown Buyer', email: '' }
+          } as Sale;
         })
       );
 
-      setOrders(ordersWithBuyers);
+      setSales(salesWithDetails);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('Error fetching sales:', error);
       toast({
         title: "Error",
         description: "Failed to load payment history",
@@ -144,7 +116,7 @@ const PaymentInfo = () => {
   };
 
   useEffect(() => {
-    fetchOrders();
+    fetchSales();
     
     // Set up real-time listener for new payments with improved handling
     const channel = supabase
@@ -153,12 +125,12 @@ const PaymentInfo = () => {
         { 
           event: '*', 
           schema: 'public', 
-          table: 'orders'
+          table: 'sales'
         }, 
         async (payload) => {
-          console.log('Payment info received order update:', payload);
+          console.log('Payment info received sales update:', payload);
           // Refresh payments when changes occur
-          await fetchOrders();
+          await fetchSales();
         }
       )
       .subscribe();
@@ -168,10 +140,10 @@ const PaymentInfo = () => {
     };
   }, [user]);
 
-  const handleViewInvoice = async (orderId: string) => {
+  const handleViewInvoice = async (saleId: string) => {
     try {
-      setInvoiceLoading(orderId);
-      const { success, data, error } = await generateInvoice(orderId);
+      setInvoiceLoading(saleId);
+      const { success, data, error } = await generateInvoice(saleId);
       
       if (success && data) {
         setSelectedInvoice(data);
@@ -296,7 +268,7 @@ const PaymentInfo = () => {
             <div className="flex justify-center py-8">
               <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
             </div>
-          ) : orders.length === 0 ? (
+          ) : sales.length === 0 ? (
             <div className="text-center py-12">
               <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
               <p className="text-gray-500 text-lg">No payments received yet</p>
@@ -304,83 +276,74 @@ const PaymentInfo = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {orders.map((order) => (
-                <Card key={order.id} className={`border-l-4 ${
-                  order.payment_status === 'completed' ? 'border-l-green-500' : 
-                  order.payment_status === 'pending' ? 'border-l-yellow-500' : 
+              {sales.map((sale) => (
+                <Card key={sale.id} className={`border-l-4 ${
+                  sale.payment_status === 'completed' ? 'border-l-green-500' : 
+                  sale.payment_status === 'pending' ? 'border-l-yellow-500' : 
                   'border-l-red-500'
                 } hover:shadow-md hover:-translate-y-1 transition-all duration-300`}>
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-1">{order.product?.name}</h3>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-1">{sale.product?.name}</h3>
                         <div className="flex items-center text-sm text-gray-600 space-x-4">
                           <div className="flex items-center">
                             <User className="h-4 w-4 mr-1" />
-                            <span>{order.buyer?.name}</span>
+                            <span>{sale.buyer?.name}</span>
                           </div>
                           <div className="flex items-center">
                             <Calendar className="h-4 w-4 mr-1" />
-                            <span>{new Date(order.payment_date || order.created_at || '').toLocaleDateString()}</span>
+                            <span>{new Date(sale.created_at || '').toLocaleDateString()}</span>
                           </div>
                           <div className="flex items-center">
                             <Package className="h-4 w-4 mr-1" />
-                            <span>{order.product?.quantity} {order.product?.unit}</span>
+                            <span>{sale.product?.quantity} {sale.product?.unit}</span>
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="flex items-center justify-end font-bold text-2xl text-green-600 mb-2">
                           <IndianRupee className="h-6 w-6 mr-1" />
-                          <span>{order.amount?.toLocaleString()}</span>
+                          <span>{sale.total_amount?.toLocaleString()}</span>
                         </div>
-                        <Badge className={getStatusColor(order.payment_status)}>
-                          {order.payment_status === 'completed' ? 'Payment Received' : 
-                           order.payment_status === 'pending' ? 'Payment Pending' : 
-                           order.payment_status}
+                        <Badge className={getStatusColor(sale.payment_status)}>
+                          {sale.payment_status === 'completed' ? 'Payment Received' : 
+                           sale.payment_status === 'pending' ? 'Payment Pending' : 
+                           sale.payment_status}
                         </Badge>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-sm">
-                      <div>
-                        <span className="text-gray-600 font-medium">Payment Method:</span>
-                        <p className="mt-1">{order.payment_method.toUpperCase()}</p>
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 text-sm">
                       <div>
                         <span className="text-gray-600 font-medium">Transaction ID:</span>
-                        <p className="mt-1 font-mono text-xs">{order.transaction_id}</p>
+                        <p className="mt-1 font-mono text-xs">{sale.payment_id || 'N/A'}</p>
                       </div>
                       <div>
                         <span className="text-gray-600 font-medium">Buyer Email:</span>
-                        <p className="mt-1">{order.buyer?.email}</p>
+                        <p className="mt-1">{sale.buyer?.email}</p>
                       </div>
                     </div>
 
-                    {order.delivery_address && (
+                    {sale.delivery_address && (
                       <div className="mb-4 p-3 bg-gray-50 rounded-lg">
                         <span className="text-gray-600 font-medium text-sm">Delivery Address:</span>
-                        <p className="mt-1 text-sm">
-                          {order.delivery_address.addressLine1}
-                          {order.delivery_address.addressLine2 && `, ${order.delivery_address.addressLine2}`}
-                          <br />
-                          {order.delivery_address.city}, {order.delivery_address.state} - {order.delivery_address.postalCode}
-                        </p>
+                        <p className="mt-1 text-sm">{sale.delivery_address}</p>
                       </div>
                     )}
                     
                     <div className="flex justify-end">
-                      {order.payment_status === 'completed' && (
+                      {sale.payment_status === 'completed' && (
                         <Dialog>
                           <DialogTrigger asChild>
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => handleViewInvoice(order.id)}
-                              disabled={invoiceLoading === order.id}
+                              onClick={() => handleViewInvoice(sale.id)}
+                              disabled={invoiceLoading === sale.id}
                               className="hover:shadow-md transition-all duration-300"
                             >
-                              {invoiceLoading === order.id ? (
+                              {invoiceLoading === sale.id ? (
                                 <div className="animate-spin h-4 w-4 mr-2 border-2 border-current border-t-transparent rounded-full" />
                               ) : (
                                 <Eye className="h-4 w-4 mr-2" />
